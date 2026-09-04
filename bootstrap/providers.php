@@ -21,4 +21,5 @@ return [
     RepositoryServiceProvider::class,
 
     App\Modules\Payment\Providers\PaymentServiceProvider::class,
+    App\Modules\Messaging\Providers\MessagingServiceProvider::class, // <-- Ajoutez cette ligne
 ];
