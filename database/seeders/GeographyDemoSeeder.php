@@ -7,6 +7,7 @@ use App\Models\Landlord\Country;
 use App\Models\Landlord\Region;
 use App\Models\Landlord\Department;
 use App\Models\Landlord\City;
+use App\Models\Tenant\Address;
 use App\Models\Landlord\Neighborhood;
 use App\Models\Landlord\Street;
 use Illuminate\Database\Seeder;
