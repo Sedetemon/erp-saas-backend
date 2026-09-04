@@ -2,19 +2,16 @@
 
 namespace App\Support\Enums;
 
-
-enum SubscriptionStatus:string
+enum SubscriptionStatus: string
 {
+    case TRIAL = 'trial';
 
-    case ACTIVE='active';
+    case ACTIVE = 'active';
 
-    case PENDING='pending';
+    case EXPIRED = 'expired';
 
-    case CANCELLED='cancelled';
+    case CANCELLED = 'cancelled';
 
-    case EXPIRED='expired';
-
-    case SUSPENDED='suspended';
-
+    case SUSPENDED = 'suspended';
 
 }

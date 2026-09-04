@@ -46,9 +46,23 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                \PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
+
+        // Définition de la connexion dynamique pour les tenants
+    'tenant' => [
+        'driver' => 'mysql',
+        'host' => env('DB_HOST', '127.0.0.1'),
+        'port' => env('DB_PORT', '3306'),
+        'database' => env('DB_TENANT_DATABASE', null), // Sera défini dynamiquement par le middleware
+        'username' => env('DB_USERNAME', 'root'),
+        'password' => env('DB_PASSWORD', ''),
+        'charset' => 'utf8mb4',
+        'collation' => 'utf8mb4_unicode_ci',
+        'prefix' => '',
+        'strict' => true,
+    ],
 
         'mariadb' => [
             'driver' => 'mariadb',
@@ -66,7 +80,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                \PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -118,9 +132,14 @@ return [
         ],
 
         // ============================================================
-        //   🏢 CONNEXION TENANT (base de chaque client, dynamique)
+        //   🏢 CONNEXION TENANT (gabarit — voir config/tenancy.php)
         // ============================================================
-        'tenant' => [
+        // ATTENTION : ne JAMAIS nommer cette connexion "tenant" : ce nom
+        // est réservé par stancl/tenancy, qui supprime puis recrée
+        // database.connections.tenant dynamiquement à chaque bascule de
+        // tenant (DatabaseManager::connectToTenant()). Un gabarit portant
+        // aussi ce nom serait supprimé juste avant d'être relu.
+        'tenant_template' => [
             'driver' => 'mysql',
             'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => env('TENANT_DB_PORT', env('DB_PORT', '3306')),

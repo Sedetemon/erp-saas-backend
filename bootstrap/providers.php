@@ -2,19 +2,23 @@
 
 use App\Providers\AppServiceProvider;
 use App\Providers\ERPServiceProvider;
+use App\Providers\EventServiceProvider;
 use App\Providers\ModuleServiceProvider;
 use App\Providers\RepositoryServiceProvider;
-use App\Providers\TenantServiceProvider;
+use App\Providers\TenancyServiceProvider;
 
 return [
     AppServiceProvider::class,
 
-    ERPServiceProvider::class,
+    EventServiceProvider::class,
 
-    TenantServiceProvider::class,
+    TenancyServiceProvider::class,
+
+    ERPServiceProvider::class,
 
     ModuleServiceProvider::class,
 
     RepositoryServiceProvider::class,
 
+    App\Modules\Payment\Providers\PaymentServiceProvider::class,
 ];

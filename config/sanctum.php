@@ -1,8 +1,5 @@
 <?php
 
-use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
-use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 use Laravel\Sanctum\Sanctum;
 
 return [
@@ -18,12 +15,14 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
-        'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
-    ))),
+    'stateful' => explode(',', env(
+        'SANCTUM_STATEFUL_DOMAINS',
+        sprintf(
+            '%s%s',
+            'localhost,localhost:3000,localhost:8000,127.0.0.1,127.0.0.1:8000,::1',
+            Sanctum::currentApplicationUrlWithPort()
+        )
+    )),
 
     /*
     |--------------------------------------------------------------------------
@@ -31,9 +30,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | This array contains the authentication guards that will be checked when
-    | Sanctum is trying to authenticate a request. If none of these guards
-    | are able to authenticate the request, Sanctum will use the bearer
-    | token that's present on an incoming request for authentication.
+    | Sanctum is attempting to authenticate a request. If none of these guards
+    | are able to authenticate the request, Sanctum will use the bearer token.
     |
     */
 
@@ -44,9 +42,9 @@ return [
     | Expiration Minutes
     |--------------------------------------------------------------------------
     |
-    | This value controls the number of minutes until an issued token will be
-    | considered expired. This will override any values set in the token's
-    | "expires_at" attribute, but first-party sessions are not affected.
+    | This value controls the number of minutes until an issued token will
+    | be considered expired. This overrides the token's "expires_at" value
+    | but does not affect first-party session authentication.
     |
     */
 
@@ -57,11 +55,8 @@ return [
     | Token Prefix
     |--------------------------------------------------------------------------
     |
-    | Sanctum can prefix new tokens in order to take advantage of numerous
-    | security scanning initiatives maintained by open source platforms
-    | that notify developers if they commit tokens into repositories.
-    |
-    | See: https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning
+    | Sanctum can prefix new tokens in order to help identify tokens in secret
+    | scanning tools. The prefix should contain a prefix, such as "sk_".
     |
     */
 
@@ -69,19 +64,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Personal Access Token Model
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT POUR NOTRE ARCHITECTURE MULTI-TENANT :
+    |
+    | Nous utilisons notre propre modèle PersonalAccessToken afin de forcer
+    | Sanctum à utiliser la connexion "tenant".
+    |
+    | Chaque tenant possède donc sa propre table:
+    |
+    | personal_access_tokens
+    |
+    | dans sa propre base de données.
+    |
+    */
+
+    'personal_access_token_model' => App\Models\PersonalAccessToken::class,
+
+    /*
+    |--------------------------------------------------------------------------
     | Sanctum Middleware
     |--------------------------------------------------------------------------
     |
-    | When authenticating your first-party SPA with Sanctum you may need to
-    | customize some of the middleware Sanctum uses while processing the
-    | request. You may change the middleware listed below as required.
+    | When authenticating your first-party SPA with Sanctum, you may need to
+    | customize some of the middleware Sanctum uses while processing requests.
     |
     */
 
     'middleware' => [
-        'authenticate_session' => AuthenticateSession::class,
-        'encrypt_cookies' => EncryptCookies::class,
-        'validate_csrf_token' => ValidateCsrfToken::class,
+        'authenticate_session' => Laravel\Sanctum\Http\Middleware\AuthenticateSession::class,
+        'encrypt_cookies' => Illuminate\Cookie\Middleware\EncryptCookies::class,
+        'validate_csrf_token' => Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
     ],
 
 ];
