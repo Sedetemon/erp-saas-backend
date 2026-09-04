@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
-use App\Models\Landlord\Address;
+use App\Models\Tenant\Address;
 use Illuminate\Http\Request;
 use App\Modules\Hotel\Models\Hotel;
 
@@ -23,7 +23,7 @@ class GeoController extends Controller
         $radius = $request->input('radius', 10);
 
         $hotels = Hotel::nearby($request->lat, $request->lng, $radius)
-            ->with('primaryAddress')
+            ->with('addresses')
             ->get();
 
         return response()->json([

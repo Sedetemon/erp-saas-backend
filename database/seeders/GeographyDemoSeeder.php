@@ -9,7 +9,6 @@ use App\Models\Landlord\Department;
 use App\Models\Landlord\City;
 use App\Models\Landlord\Neighborhood;
 use App\Models\Landlord\Street;
-use App\Models\Landlord\Address;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 

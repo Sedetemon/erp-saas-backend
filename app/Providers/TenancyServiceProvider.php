@@ -29,6 +29,7 @@ class TenancyServiceProvider extends ServiceProvider
             database_path('migrations/landlord/tenancy'),
             database_path('migrations/landlord/security'),
             database_path('migrations/landlord/monitoring'),
+            database_path('migrations/landlord/geography'), // <-- Ajoutez cette ligne
         ]);
     }
 

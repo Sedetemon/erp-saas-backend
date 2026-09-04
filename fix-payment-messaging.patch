@@ -1,0 +1,53 @@
+diff --git a/app/Modules/Messaging/Providers/MessagingServiceProvider.php b/app/Modules/Messaging/Providers/MessagingServiceProvider.php
+index d183829..810b94d 100644
+--- a/app/Modules/Messaging/Providers/MessagingServiceProvider.php
++++ b/app/Modules/Messaging/Providers/MessagingServiceProvider.php
+@@ -16,8 +16,9 @@ public function register(): void
+ 
+     public function boot(): void
+     {
+-        // Charger les migrations du module situées dans le dossier database/migrations du module
+-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
++        // Les migrations du module Messaging vivent dans database/migrations/tenant/
++        // (chargées via le pipeline de migration standard tenant), pas ici :
++        // il n'existe pas de dossier app/Modules/Messaging/database/migrations.
+ 
+         // Charger les routes du module (si tu veux les séparer)
+         // $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
+diff --git a/app/Modules/Payment/Routes/PaymentRoutes_api.php b/app/Modules/Payment/Routes/PaymentRoutes_api.php
+deleted file mode 100644
+index 5056c4d..0000000
+--- a/app/Modules/Payment/Routes/PaymentRoutes_api.php
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<?php
+-
+-use App\Modules\Payment\Http\Controllers\PaymentController;
+-use App\Modules\Payment\Http\Controllers\WebhookController;
+-use Illuminate\Support\Facades\Route;
+-use App\Modules\Payment\Http\Controllers\PaymentMethodController;
+-
+-Route::middleware(['identify.tenant', 'auth:sanctum'])->prefix('payment-methods')->group(function () {
+-    Route::get('/', [PaymentMethodController::class, 'index']);
+-    Route::post('/', [PaymentMethodController::class, 'store']);
+-    Route::delete('/{id}', [PaymentMethodController::class, 'destroy']);
+-    Route::post('/{id}/default', [PaymentMethodController::class, 'setDefault']);
+-});
+-
+-Route::middleware(['identify.tenant', 'auth:sanctum'])->prefix('payments')->group(function () {
+-    Route::post('initiate', [PaymentController::class, 'initiate']);
+-    Route::get('transactions', [PaymentController::class, 'index']);
+-    Route::get('transactions/{id}', [PaymentController::class, 'show']);
+-});
+-
+-Route::post('webhook/{provider}/{tenant}', [WebhookController::class, 'handle'])->name('payment.webhook');
+diff --git a/bootstrap/providers.php b/bootstrap/providers.php
+index 913d0e6..5c14beb 100644
+--- a/bootstrap/providers.php
++++ b/bootstrap/providers.php
+@@ -21,4 +21,5 @@
+     RepositoryServiceProvider::class,
+ 
+     App\Modules\Payment\Providers\PaymentServiceProvider::class,
++    App\Modules\Messaging\Providers\MessagingServiceProvider::class,
+ ];

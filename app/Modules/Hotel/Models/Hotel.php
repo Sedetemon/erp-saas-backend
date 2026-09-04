@@ -40,7 +40,11 @@ class Hotel extends Model
 
     public function primaryAddress(): ?Address
     {
-        return $this->addresses()->primary()->first();
+        if ($this->relationLoaded('addresses')) {
+        return $this->addresses->firstWhere('is_primary', true);
+    }
+
+    return $this->addresses()->primary()->first();
     }
 
     public function rooms(): HasMany
