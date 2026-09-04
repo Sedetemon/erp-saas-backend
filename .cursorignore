@@ -1,0 +1,29 @@
+# Dépendances & Code généré
+vendor/
+node_modules/
+.dart_tool/
+.pub-cache/
+.pub/
+build/
+ios/Pods/
+android/.gradle/
+
+# Logs & Caches
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+*.log
+
+# Médias & Fichiers lourds
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+*.zip
+
+# Bases de données locales
+*.sqlite
+*.sql
+*.db
