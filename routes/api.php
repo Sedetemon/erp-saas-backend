@@ -42,29 +42,10 @@ Route::middleware(['identify.tenant'])->group(function () {
 
         Route::post('/auth/logout', [TenantAuthController::class, 'logout']);
 
-
-        // --- MODULE OPTIONNEL : HÔTELLERIE ---
-        Route::middleware(['tenant.module:hotel'])->prefix('hotel')->group(function () {
-            Route::get('/rooms', function () {
-                return response()->json(['message' => 'Accès autorisé au module Hôtellerie']);
-            });
-        });
-
-
-        // --- MODULE OPTIONNEL : RESSOURCES HUMAINES ---
-        Route::middleware(['tenant.module:hr'])->prefix('hr')->group(function () {
-            Route::get('/employees', function () {
-                return response()->json(['message' => 'Accès autorisé au module RH']);
-            });
-        });
-
-
-        // --- MODULE OPTIONNEL : INVENTAIRE ---
-        Route::middleware(['tenant.module:inventory'])->prefix('inventory')->group(function () {
-            Route::get('/stocks', function () {
-                return response()->json(['message' => 'Accès autorisé au module Stocks']);
-            });
-        });
-
+        // Les routes métier des modules Hôtel / RH / Inventaire / POS / Messaging
+        // sont définies dans routes/tenant.php (chargé plus bas dans bootstrap/app.php),
+        // avec le middleware module.active:<nom>. Ne pas redéfinir de stubs ici :
+        // toute route dupliquée avec la même URI serait simplement écrasée par
+        // celle de tenant.php, ce qui rend ce fichier trompeur à la lecture.
     });
 });
