@@ -7,8 +7,8 @@ use App\Modules\Hotel\Models\Guest;
 use App\Modules\Hotel\Models\Room;
 use App\Modules\Hotel\Models\RoomType;
 use App\Modules\Hotel\Services\ReservationService;
+use App\Modules\Inventory\Models\InventoryItem;
 use App\Modules\Inventory\Models\InventoryMovement;
-use App\Modules\Inventory\Models\InventoryStock;
 use App\Modules\Pos\Models\PosCategory;
 use App\Modules\Pos\Models\PosOrder;
 use App\Modules\Pos\Models\PosProduct;
@@ -151,10 +151,12 @@ class PosOrderLifecycleApiTest extends TenantTestCase
 
     public function test_closing_an_order_decrements_stock_and_records_a_movement(): void
     {
-        $stock = InventoryStock::create([
-            'pos_product_id' => $this->product->id,
-            'quantity'       => 50,
+        $item = InventoryItem::create([
+            'name' => $this->product->name,
+            'itemable_type' => PosProduct::class,
+            'itemable_id' => $this->product->id,
         ]);
+        $stock = $item->stock()->create(['quantity' => 50, 'alert_threshold' => 5]);
 
         $order = PosOrder::create(['order_number' => 'CMD-TEST-6', 'type' => 'dine_in', 'status' => 'served']);
         $order->items()->create([
@@ -173,11 +175,44 @@ class PosOrderLifecycleApiTest extends TenantTestCase
         ], 'tenant');
 
         $this->assertDatabaseHas('inventory_movements', [
-            'pos_product_id' => $this->product->id,
+            'inventory_item_id' => $item->id,
             'type'           => 'out',
             'quantity'       => 4,
             'reference_type' => 'pos_order',
             'reference_id'   => $order->id,
+        ], 'tenant');
+    }
+
+    public function test_closing_an_order_fails_when_stock_is_insufficient(): void
+    {
+        $item = InventoryItem::create([
+            'name' => $this->product->name,
+            'itemable_type' => PosProduct::class,
+            'itemable_id' => $this->product->id,
+        ]);
+        $item->stock()->create(['quantity' => 2, 'alert_threshold' => 5]);
+
+        $order = PosOrder::create(['order_number' => 'CMD-TEST-6B', 'type' => 'dine_in', 'status' => 'served']);
+        $order->items()->create([
+            'pos_product_id' => $this->product->id,
+            'quantity'       => 4,
+            'unit_price'     => 2000,
+        ]);
+
+        $response = $this->headers()->postJson("/api/pos/orders/{$order->id}/close", [
+            'payment_method' => 'cash',
+        ]);
+
+        $response->assertStatus(422);
+
+        $this->assertDatabaseHas('inventory_stocks', [
+            'inventory_item_id' => $item->id,
+            'quantity'          => 2, // inchangé, la clôture a été annulée
+        ], 'tenant');
+
+        $this->assertDatabaseHas('pos_orders', [
+            'id'     => $order->id,
+            'status' => 'served', // pas passée à 'closed'
         ], 'tenant');
     }
 

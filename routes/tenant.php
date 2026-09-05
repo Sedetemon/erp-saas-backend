@@ -19,6 +19,8 @@ use App\Modules\Pos\Http\Controllers\PosCategoryController;
 use App\Modules\Pos\Http\Controllers\PosOrderController;
 use App\Modules\Pos\Http\Controllers\PosProductController;
 use App\Modules\Pos\Http\Controllers\PosTableController;
+use App\Modules\Inventory\Http\Controllers\InventoryItemController;
+use App\Modules\Inventory\Http\Controllers\InventoryMovementController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -124,6 +126,13 @@ Route::middleware(['identify.tenant'])->group(function () {
         Route::post('orders/{posOrder}/send-to-kitchen', [PosOrderController::class, 'sendToKitchen']);
         Route::post('orders/{posOrder}/serve', [PosOrderController::class, 'markServed']);
         Route::post('orders/{posOrder}/close', [PosOrderController::class, 'close']);
+    });
+
+    // Module Inventaire (Autonome, payant séparément — peut être utilisé par POS mais n'est pas inclus avec lui)
+    Route::middleware(['auth:sanctum', 'module.active:inventory'])->prefix('inventory')->group(function () {
+        Route::apiResource('items', InventoryItemController::class)->except(['create', 'edit']);
+        Route::get('movements', [InventoryMovementController::class, 'index']);
+        Route::post('movements', [InventoryMovementController::class, 'store']);
     });
 
     // Module RH

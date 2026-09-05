@@ -1,0 +1,1864 @@
+diff --git a/app/Exceptions/Handler.php b/app/Exceptions/Handler.php
+deleted file mode 100644
+index 3f3fe6e..0000000
+--- a/app/Exceptions/Handler.php
++++ /dev/null
+@@ -1,40 +0,0 @@
+-<?php
+-
+-namespace App\Exceptions;
+-
+-
+-use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+-use Throwable;
+-
+-
+-class Handler extends ExceptionHandler
+-{
+-
+-    public function register(): void
+-    {
+-
+-        $this->renderable(function(
+-            ERPException $exception,
+-            $request
+-        ){
+-
+-            if($request->expectsJson())
+-            {
+-
+-                return response()->json([
+-
+-                    'success'=>false,
+-
+-                    'message'=>$exception->getMessage(),
+-
+-                    'errors'=>$exception->context()
+-
+-                ], $exception->getCode());
+-
+-            }
+-
+-        });
+-
+-    }
+-
+-}
+diff --git a/app/Http/Controllers/Tenant/Auth/TenantAuthController.php b/app/Http/Controllers/Tenant/Auth/TenantAuthController.php
+index 7842a19..575e66e 100644
+--- a/app/Http/Controllers/Tenant/Auth/TenantAuthController.php
++++ b/app/Http/Controllers/Tenant/Auth/TenantAuthController.php
+@@ -3,7 +3,7 @@
+ namespace App\Http\Controllers\Tenant\Auth;
+ 
+ use App\Http\Controllers\Controller;
+-use App\Models\Tenant\User;
++use App\Models\User;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Hash;
+ 
+diff --git a/app/Http/Controllers/Tenant/GeoController.php b/app/Http/Controllers/Tenant/GeoController.php
+index fb82ec9..5dc15a9 100644
+--- a/app/Http/Controllers/Tenant/GeoController.php
++++ b/app/Http/Controllers/Tenant/GeoController.php
+@@ -3,9 +3,16 @@
+ namespace App\Http\Controllers\Tenant;
+ 
+ use App\Http\Controllers\Controller;
+-use App\Models\Landlord\Address;
++use App\Models\Tenant\Address;
+ use Illuminate\Http\Request;
+ use App\Modules\Hotel\Models\Hotel;
++use App\Models\Landlord\Continent;
++use App\Models\Landlord\Country;
++use App\Models\Landlord\Region;
++use App\Models\Landlord\Department;
++use App\Models\Landlord\City;
++use App\Models\Landlord\Neighborhood;
++use App\Models\Landlord\Street;
+ 
+ class GeoController extends Controller
+ {
+@@ -23,7 +30,7 @@ public function nearbyHotels(Request $request)
+         $radius = $request->input('radius', 10);
+ 
+         $hotels = Hotel::nearby($request->lat, $request->lng, $radius)
+-            ->with('primaryAddress')
++            ->with('addresses')
+             ->get();
+ 
+         return response()->json([
+@@ -37,6 +44,228 @@ public function nearbyHotels(Request $request)
+         ]);
+     }
+ 
++    /**
++     * Lister les continents
++     */
++    public function continents(Request $request)
++    {
++        $continents = Continent::active()
++            ->withCount('countries')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($continents);
++    }
++
++    /**
++     * Lister les pays, filtrables par continent
++     */
++    public function countries(Request $request)
++    {
++        $request->validate([
++            'continent_id' => 'nullable|exists:continents,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $countries = Country::active()
++            ->when($request->filled('continent_id'), fn ($q) => $q->where('continent_id', $request->continent_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->withCount('regions')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($countries);
++    }
++
++    /**
++     * Lister les régions, filtrables par pays
++     */
++    public function regions(Request $request)
++    {
++        $request->validate([
++            'country_id' => 'nullable|exists:countries,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $regions = Region::active()
++            ->when($request->filled('country_id'), fn ($q) => $q->where('country_id', $request->country_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->withCount('departments')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($regions);
++    }
++
++    /**
++     * Lister les départements, filtrables par région
++     */
++    public function departments(Request $request)
++    {
++        $request->validate([
++            'region_id' => 'nullable|exists:regions,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $departments = Department::active()
++            ->when($request->filled('region_id'), fn ($q) => $q->where('region_id', $request->region_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->withCount('cities')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($departments);
++    }
++
++    /**
++     * Lister les villes, filtrables par département
++     */
++    public function cities(Request $request)
++    {
++        $request->validate([
++            'department_id' => 'nullable|exists:departments,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $cities = City::active()
++            ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->withCount('neighborhoods')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($cities);
++    }
++
++    /**
++     * Lister les quartiers, filtrables par ville
++     */
++    public function neighborhoods(Request $request)
++    {
++        $request->validate([
++            'city_id' => 'nullable|exists:cities,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $neighborhoods = Neighborhood::active()
++            ->when($request->filled('city_id'), fn ($q) => $q->where('city_id', $request->city_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->withCount('streets')
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($neighborhoods);
++    }
++
++    /**
++     * Lister les rues, filtrables par quartier
++     */
++    public function streets(Request $request)
++    {
++        $request->validate([
++            'neighborhood_id' => 'nullable|exists:neighborhoods,id',
++            'search' => 'nullable|string|max:100',
++        ]);
++
++        $streets = Street::active()
++            ->when($request->filled('neighborhood_id'), fn ($q) => $q->where('neighborhood_id', $request->neighborhood_id))
++            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->search . '%'))
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 100));
++
++        return response()->json($streets);
++    }
++
++    /**
++     * Rechercher des commerces (entités non-hôtel disposant d'une adresse géolocalisée) à proximité.
++     *
++     * NB: il n'existe pas encore de modèle "Commerce" dédié dans le projet — cette méthode
++     * s'appuie sur la table addresses polymorphe (entity_type/entity_id) et exclut simplement
++     * les hôtels (déjà couverts par nearbyHotels). À affiner si un module Commerce apparaît.
++     */
++    public function nearbyCommerces(Request $request)
++    {
++        $request->validate([
++            'lat' => 'required|numeric|between:-90,90',
++            'lng' => 'required|numeric|between:-180,180',
++            'radius' => 'nullable|numeric|min:0.1|max:100',
++        ]);
++
++        $radius = $request->input('radius', 10);
++
++        $commerces = Address::whereNotNull('latitude')
++            ->whereNotNull('longitude')
++            ->where('entity_type', '!=', Hotel::class)
++            ->with('addressable')
++            ->get()
++            ->map(function (Address $address) use ($request) {
++                $address->distance_km = round($address->distanceTo($request->lat, $request->lng), 2);
++                return $address;
++            })
++            ->filter(fn (Address $address) => $address->distance_km <= $radius)
++            ->sortBy('distance_km')
++            ->values();
++
++        return response()->json([
++            'data' => $commerces,
++            'meta' => [
++                'latitude' => $request->lat,
++                'longitude' => $request->lng,
++                'radius' => $radius,
++                'count' => $commerces->count(),
++            ],
++        ]);
++    }
++
++    /**
++     * Rechercher tout ce qui est géolocalisable à proximité (hôtels + autres entités adressées).
++     */
++    public function nearbyAll(Request $request)
++    {
++        $request->validate([
++            'lat' => 'required|numeric|between:-90,90',
++            'lng' => 'required|numeric|between:-180,180',
++            'radius' => 'nullable|numeric|min:0.1|max:100',
++        ]);
++
++        $radius = $request->input('radius', 10);
++
++        $hotels = Hotel::nearby($request->lat, $request->lng, $radius)
++            ->with('addresses')
++            ->get()
++            ->map(fn (Hotel $hotel) => [
++                'type' => 'hotel',
++                'entity' => $hotel,
++            ]);
++
++        $others = Address::whereNotNull('latitude')
++            ->whereNotNull('longitude')
++            ->where('entity_type', '!=', Hotel::class)
++            ->with('addressable')
++            ->get()
++            ->map(function (Address $address) use ($request) {
++                $address->distance_km = round($address->distanceTo($request->lat, $request->lng), 2);
++                return $address;
++            })
++            ->filter(fn (Address $address) => $address->distance_km <= $radius)
++            ->map(fn (Address $address) => [
++                'type' => 'other',
++                'entity' => $address,
++            ]);
++
++        $results = $hotels->concat($others)->values();
++
++        return response()->json([
++            'data' => $results,
++            'meta' => [
++                'latitude' => $request->lat,
++                'longitude' => $request->lng,
++                'radius' => $radius,
++                'count' => $results->count(),
++            ],
++        ]);
++    }
++
+     /**
+      * Calculer la distance entre deux adresses
+      */
+diff --git a/app/Models/Landlord/Street.php b/app/Models/Landlord/Street.php
+index 4a3539f..5bc15f7 100644
+--- a/app/Models/Landlord/Street.php
++++ b/app/Models/Landlord/Street.php
+@@ -5,6 +5,7 @@
+ use Illuminate\Database\Eloquent\Model;
+ use Illuminate\Database\Eloquent\Relations\BelongsTo;
+ use Illuminate\Database\Eloquent\Relations\HasMany;
++use App\Models\Tenant\Address;
+ 
+ class Street extends Model
+ {
+diff --git a/app/Modules/Hotel/Models/Guest.php b/app/Modules/Hotel/Models/Guest.php
+index ede2d5f..453f9a1 100644
+--- a/app/Modules/Hotel/Models/Guest.php
++++ b/app/Modules/Hotel/Models/Guest.php
+@@ -2,8 +2,6 @@
+ 
+ namespace App\Modules\Hotel\Models;
+ 
+-use App\Modules\Geography\Models\City;
+-use App\Modules\Geography\Models\Country;
+ use App\Support\Traits\HasUuid;
+ use Database\Factories\Module\Hotel\GuestFactory;
+ use Illuminate\Database\Eloquent\Factories\HasFactory;
+@@ -23,14 +21,11 @@ class Guest extends Model
+         'last_name',
+         'email',
+         'phone',
+-        'country_id',
+-        'city_id',
+         'nationality',
+         'document_type',
+         'document_number',
+         'address',
+         'notes',
+-        'hotel_id',
+     ];
+ 
+     protected static function newFactory(): GuestFactory
+@@ -40,16 +35,6 @@ protected static function newFactory(): GuestFactory
+ 
+     // --- RELATIONS ---
+ 
+-    public function country(): BelongsTo
+-    {
+-        return $this->belongsTo(Country::class, 'country_id');
+-    }
+-
+-    public function city(): BelongsTo
+-    {
+-        return $this->belongsTo(City::class, 'city_id');
+-    }
+-
+     public function reservations(): HasMany
+     {
+         return $this->hasMany(Reservation::class);
+@@ -60,11 +45,6 @@ public function invoices(): HasMany
+         return $this->hasMany(Invoice::class);
+     }
+ 
+-    public function hotel(): BelongsTo
+-    {
+-        return $this->belongsTo(Hotel::class);
+-    }
+-
+     // --- ACCESSEURS ---
+ 
+     public function getFullNameAttribute(): string
+diff --git a/app/Modules/Hotel/Models/Hotel.php b/app/Modules/Hotel/Models/Hotel.php
+index 3676fa4..a674bda 100644
+--- a/app/Modules/Hotel/Models/Hotel.php
++++ b/app/Modules/Hotel/Models/Hotel.php
+@@ -40,6 +40,10 @@ public function addresses(): MorphMany
+ 
+     public function primaryAddress(): ?Address
+     {
++        if ($this->relationLoaded('addresses')) {
++            return $this->addresses->firstWhere('is_primary', true);
++        }
++
+         return $this->addresses()->primary()->first();
+     }
+ 
+diff --git a/app/Modules/Inventory/Exceptions/InsufficientStockException.php b/app/Modules/Inventory/Exceptions/InsufficientStockException.php
+new file mode 100644
+index 0000000..4cfcb37
+--- /dev/null
++++ b/app/Modules/Inventory/Exceptions/InsufficientStockException.php
+@@ -0,0 +1,15 @@
++<?php
++
++namespace App\Modules\Inventory\Exceptions;
++
++use RuntimeException;
++
++class InsufficientStockException extends RuntimeException
++{
++    public function __construct(string $itemName, float $available, float $requested)
++    {
++        parent::__construct(
++            "Stock insuffisant pour \"{$itemName}\" : disponible {$available}, demandé {$requested}."
++        );
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Controllers/InventoryItemController.php b/app/Modules/Inventory/Http/Controllers/InventoryItemController.php
+new file mode 100644
+index 0000000..b43685b
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Controllers/InventoryItemController.php
+@@ -0,0 +1,79 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Controllers;
++
++use App\Http\Controllers\Controller;
++use App\Modules\Inventory\Http\Requests\StoreInventoryItemRequest;
++use App\Modules\Inventory\Http\Requests\UpdateInventoryItemRequest;
++use App\Modules\Inventory\Http\Resources\InventoryItemResource;
++use App\Modules\Inventory\Models\InventoryItem;
++use App\Modules\Pos\Models\PosProduct;
++use Illuminate\Http\JsonResponse;
++use Illuminate\Http\Request;
++use Illuminate\Support\Facades\DB;
++
++class InventoryItemController extends Controller
++{
++    public function index(Request $request): JsonResponse
++    {
++        $items = InventoryItem::query()
++            ->with('stock')
++            ->when($request->filled('category'), fn ($q) => $q->where('category', $request->category))
++            ->when($request->filled('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
++            ->when($request->filled('search'), fn ($q) => $q->where(function ($q) use ($request) {
++                $q->where('name', 'like', '%' . $request->search . '%')
++                    ->orWhere('sku', 'like', '%' . $request->search . '%');
++            }))
++            ->when($request->boolean('low_stock'), fn ($q) => $q->whereHas('stock', fn ($q) => $q->lowStock()))
++            ->orderBy('name')
++            ->paginate($request->integer('per_page', 20));
++
++        return InventoryItemResource::collection($items)->response();
++    }
++
++    public function store(StoreInventoryItemRequest $request): JsonResponse
++    {
++        $item = DB::connection('tenant')->transaction(function () use ($request) {
++            $data = $request->safe()->only(['name', 'sku', 'unit', 'category', 'is_active']);
++
++            if ($request->filled('pos_product_id')) {
++                $data['itemable_type'] = PosProduct::class;
++                $data['itemable_id'] = $request->pos_product_id;
++            }
++
++            $item = InventoryItem::create($data);
++
++            $item->stock()->create([
++                'quantity' => $request->input('initial_quantity', 0),
++                'alert_threshold' => $request->input('alert_threshold', 5),
++            ]);
++
++            return $item;
++        });
++
++        return response()->json(new InventoryItemResource($item->load('stock')), 201);
++    }
++
++    public function show(InventoryItem $item): JsonResponse
++    {
++        return response()->json(new InventoryItemResource($item->load('stock')));
++    }
++
++    public function update(UpdateInventoryItemRequest $request, InventoryItem $item): JsonResponse
++    {
++        $item->update($request->safe()->only(['name', 'sku', 'unit', 'category', 'is_active']));
++
++        if ($request->filled('alert_threshold') && $item->stock) {
++            $item->stock->update(['alert_threshold' => $request->alert_threshold]);
++        }
++
++        return response()->json(new InventoryItemResource($item->load('stock')));
++    }
++
++    public function destroy(InventoryItem $item): JsonResponse
++    {
++        $item->delete();
++
++        return response()->json(null, 204);
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Controllers/InventoryMovementController.php b/app/Modules/Inventory/Http/Controllers/InventoryMovementController.php
+new file mode 100644
+index 0000000..e653465
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Controllers/InventoryMovementController.php
+@@ -0,0 +1,48 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Controllers;
++
++use App\Http\Controllers\Controller;
++use App\Modules\Inventory\Exceptions\InsufficientStockException;
++use App\Modules\Inventory\Http\Requests\StoreInventoryMovementRequest;
++use App\Modules\Inventory\Http\Resources\InventoryMovementResource;
++use App\Modules\Inventory\Models\InventoryItem;
++use App\Modules\Inventory\Models\InventoryMovement;
++use App\Modules\Inventory\Services\InventoryService;
++use Illuminate\Http\JsonResponse;
++use Illuminate\Http\Request;
++
++class InventoryMovementController extends Controller
++{
++    public function index(Request $request): JsonResponse
++    {
++        $movements = InventoryMovement::query()
++            ->with('item')
++            ->when($request->filled('inventory_item_id'), fn ($q) => $q->where('inventory_item_id', $request->inventory_item_id))
++            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
++            ->latest()
++            ->paginate($request->integer('per_page', 20));
++
++        return InventoryMovementResource::collection($movements)->response();
++    }
++
++    public function store(StoreInventoryMovementRequest $request, InventoryService $service): JsonResponse
++    {
++        $item = InventoryItem::findOrFail($request->inventory_item_id);
++
++        try {
++            $movement = $service->recordMovement(
++                item: $item,
++                type: $request->type,
++                quantity: (float) $request->quantity,
++                referenceType: 'manual',
++                reason: $request->reason,
++                createdBy: $request->user()?->id,
++            );
++        } catch (InsufficientStockException $e) {
++            return response()->json(['message' => $e->getMessage()], 422);
++        }
++
++        return response()->json(new InventoryMovementResource($movement->load('item')), 201);
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Requests/StoreInventoryItemRequest.php b/app/Modules/Inventory/Http/Requests/StoreInventoryItemRequest.php
+new file mode 100644
+index 0000000..828ce4e
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Requests/StoreInventoryItemRequest.php
+@@ -0,0 +1,28 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Requests;
++
++use Illuminate\Foundation\Http\FormRequest;
++
++class StoreInventoryItemRequest extends FormRequest
++{
++    public function authorize(): bool
++    {
++        return true;
++    }
++
++    public function rules(): array
++    {
++        return [
++            'name' => ['required', 'string', 'max:150'],
++            'sku' => ['nullable', 'string', 'max:50', 'unique:inventory_items,sku'],
++            'unit' => ['nullable', 'string', 'max:20'],
++            'category' => ['nullable', 'string', 'max:100'],
++            'is_active' => ['nullable', 'boolean'],
++            // Rattachement optionnel à un produit POS existant.
++            'pos_product_id' => ['nullable', 'uuid', 'exists:pos_products,id'],
++            'initial_quantity' => ['nullable', 'numeric', 'min:0'],
++            'alert_threshold' => ['nullable', 'numeric', 'min:0'],
++        ];
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Requests/StoreInventoryMovementRequest.php b/app/Modules/Inventory/Http/Requests/StoreInventoryMovementRequest.php
+new file mode 100644
+index 0000000..9129cf4
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Requests/StoreInventoryMovementRequest.php
+@@ -0,0 +1,23 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Requests;
++
++use Illuminate\Foundation\Http\FormRequest;
++
++class StoreInventoryMovementRequest extends FormRequest
++{
++    public function authorize(): bool
++    {
++        return true;
++    }
++
++    public function rules(): array
++    {
++        return [
++            'inventory_item_id' => ['required', 'uuid', 'exists:inventory_items,id'],
++            'type' => ['required', 'in:in,out,adjustment'],
++            'quantity' => ['required', 'numeric', 'min:0.01'],
++            'reason' => ['nullable', 'string', 'max:255'],
++        ];
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Requests/UpdateInventoryItemRequest.php b/app/Modules/Inventory/Http/Requests/UpdateInventoryItemRequest.php
+new file mode 100644
+index 0000000..34c8d9e
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Requests/UpdateInventoryItemRequest.php
+@@ -0,0 +1,26 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Requests;
++
++use Illuminate\Foundation\Http\FormRequest;
++use Illuminate\Validation\Rule;
++
++class UpdateInventoryItemRequest extends FormRequest
++{
++    public function authorize(): bool
++    {
++        return true;
++    }
++
++    public function rules(): array
++    {
++        return [
++            'name' => ['sometimes', 'required', 'string', 'max:150'],
++            'sku' => ['nullable', 'string', 'max:50', Rule::unique('inventory_items', 'sku')->ignore($this->route('item'))],
++            'unit' => ['nullable', 'string', 'max:20'],
++            'category' => ['nullable', 'string', 'max:100'],
++            'is_active' => ['nullable', 'boolean'],
++            'alert_threshold' => ['nullable', 'numeric', 'min:0'],
++        ];
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Resources/InventoryItemResource.php b/app/Modules/Inventory/Http/Resources/InventoryItemResource.php
+new file mode 100644
+index 0000000..f083f0d
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Resources/InventoryItemResource.php
+@@ -0,0 +1,29 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Resources;
++
++use Illuminate\Http\Request;
++use Illuminate\Http\Resources\Json\JsonResource;
++
++class InventoryItemResource extends JsonResource
++{
++    public function toArray(Request $request): array
++    {
++        return [
++            'id' => $this->id,
++            'name' => $this->name,
++            'sku' => $this->sku,
++            'unit' => $this->unit,
++            'category' => $this->category,
++            'is_active' => $this->is_active,
++            'linked_to' => $this->itemable_type ? class_basename($this->itemable_type) : null,
++            'stock' => $this->whenLoaded('stock', fn () => $this->stock ? [
++                'quantity' => (float) $this->stock->quantity,
++                'alert_threshold' => (float) $this->stock->alert_threshold,
++                'is_low' => $this->stock->isLow(),
++            ] : null),
++            'created_at' => $this->created_at,
++            'updated_at' => $this->updated_at,
++        ];
++    }
++}
+diff --git a/app/Modules/Inventory/Http/Resources/InventoryMovementResource.php b/app/Modules/Inventory/Http/Resources/InventoryMovementResource.php
+new file mode 100644
+index 0000000..3f5fd3b
+--- /dev/null
++++ b/app/Modules/Inventory/Http/Resources/InventoryMovementResource.php
+@@ -0,0 +1,28 @@
++<?php
++
++namespace App\Modules\Inventory\Http\Resources;
++
++use Illuminate\Http\Request;
++use Illuminate\Http\Resources\Json\JsonResource;
++
++class InventoryMovementResource extends JsonResource
++{
++    public function toArray(Request $request): array
++    {
++        return [
++            'id' => $this->id,
++            'type' => $this->type,
++            'quantity' => (float) $this->quantity,
++            'reference_type' => $this->reference_type,
++            'reference_id' => $this->reference_id,
++            'reason' => $this->reason,
++            'created_by' => $this->created_by,
++            'item' => $this->whenLoaded('item', fn () => [
++                'id' => $this->item->id,
++                'name' => $this->item->name,
++                'sku' => $this->item->sku,
++            ]),
++            'created_at' => $this->created_at,
++        ];
++    }
++}
+diff --git a/app/Modules/Inventory/Models/InventoryItem.php b/app/Modules/Inventory/Models/InventoryItem.php
+new file mode 100644
+index 0000000..09a13b1
+--- /dev/null
++++ b/app/Modules/Inventory/Models/InventoryItem.php
+@@ -0,0 +1,55 @@
++<?php
++
++namespace App\Modules\Inventory\Models;
++
++use App\Support\Traits\HasUuid;
++use Illuminate\Database\Eloquent\Model;
++use Illuminate\Database\Eloquent\Relations\HasMany;
++use Illuminate\Database\Eloquent\Relations\HasOne;
++use Illuminate\Database\Eloquent\Relations\MorphTo;
++use Illuminate\Database\Eloquent\SoftDeletes;
++
++class InventoryItem extends Model
++{
++    use HasUuid, SoftDeletes;
++
++    protected $table = 'inventory_items';
++
++    protected $fillable = [
++        'name',
++        'sku',
++        'unit',
++        'category',
++        'is_active',
++        'itemable_type',
++        'itemable_id',
++    ];
++
++    protected $casts = [
++        'is_active' => 'boolean',
++    ];
++
++    public function stock(): HasOne
++    {
++        return $this->hasOne(InventoryStock::class);
++    }
++
++    public function movements(): HasMany
++    {
++        return $this->hasMany(InventoryMovement::class);
++    }
++
++    /**
++     * Entité source optionnelle (ex: PosProduct) dont cet item de stock
++     * dérive, si applicable.
++     */
++    public function itemable(): MorphTo
++    {
++        return $this->morphTo();
++    }
++
++    public function scopeActive($query)
++    {
++        return $query->where('is_active', true);
++    }
++}
+diff --git a/app/Modules/Inventory/Models/InventoryMovement.php b/app/Modules/Inventory/Models/InventoryMovement.php
+index 2db0095..7c05cfd 100644
+--- a/app/Modules/Inventory/Models/InventoryMovement.php
++++ b/app/Modules/Inventory/Models/InventoryMovement.php
+@@ -2,7 +2,6 @@
+ 
+ namespace App\Modules\Inventory\Models;
+ 
+-use App\Modules\Pos\Models\PosProduct;
+ use App\Support\Traits\HasUuid;
+ use Illuminate\Database\Eloquent\Model;
+ use Illuminate\Database\Eloquent\Relations\BelongsTo;
+@@ -14,7 +13,7 @@ class InventoryMovement extends Model
+     protected $table = 'inventory_movements';
+ 
+     protected $fillable = [
+-        'pos_product_id',
++        'inventory_item_id',
+         'type',
+         'quantity',
+         'reference_type',
+@@ -27,8 +26,8 @@ class InventoryMovement extends Model
+         'quantity' => 'decimal:2',
+     ];
+ 
+-    public function product(): BelongsTo
++    public function item(): BelongsTo
+     {
+-        return $this->belongsTo(PosProduct::class, 'pos_product_id');
++        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+     }
+ }
+diff --git a/app/Modules/Inventory/Models/InventoryStock.php b/app/Modules/Inventory/Models/InventoryStock.php
+index 686a75e..408d56c 100644
+--- a/app/Modules/Inventory/Models/InventoryStock.php
++++ b/app/Modules/Inventory/Models/InventoryStock.php
+@@ -2,7 +2,6 @@
+ 
+ namespace App\Modules\Inventory\Models;
+ 
+-use App\Modules\Pos\Models\PosProduct;
+ use App\Support\Traits\HasUuid;
+ use Illuminate\Database\Eloquent\Model;
+ use Illuminate\Database\Eloquent\Relations\BelongsTo;
+@@ -14,7 +13,7 @@ class InventoryStock extends Model
+     protected $table = 'inventory_stocks';
+ 
+     protected $fillable = [
+-        'pos_product_id',
++        'inventory_item_id',
+         'quantity',
+         'alert_threshold',
+     ];
+@@ -24,8 +23,23 @@ class InventoryStock extends Model
+         'alert_threshold' => 'decimal:2',
+     ];
+ 
+-    public function product(): BelongsTo
++    public function item(): BelongsTo
+     {
+-        return $this->belongsTo(PosProduct::class, 'pos_product_id');
++        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
++    }
++
++    public function isLow(): bool
++    {
++        return (float) $this->quantity <= (float) $this->alert_threshold;
++    }
++
++    public function hasSufficientQuantity(float $quantity): bool
++    {
++        return (float) $this->quantity >= $quantity;
++    }
++
++    public function scopeLowStock($query)
++    {
++        return $query->whereColumn('quantity', '<=', 'alert_threshold');
+     }
+ }
+diff --git a/app/Modules/Inventory/Services/InventoryService.php b/app/Modules/Inventory/Services/InventoryService.php
+new file mode 100644
+index 0000000..d626b21
+--- /dev/null
++++ b/app/Modules/Inventory/Services/InventoryService.php
+@@ -0,0 +1,96 @@
++<?php
++
++namespace App\Modules\Inventory\Services;
++
++use App\Modules\Inventory\Exceptions\InsufficientStockException;
++use App\Modules\Inventory\Models\InventoryItem;
++use App\Modules\Inventory\Models\InventoryMovement;
++use App\Modules\Inventory\Models\InventoryStock;
++use Illuminate\Support\Facades\DB;
++
++class InventoryService
++{
++    /**
++     * Trouve l'InventoryItem lié à une entité source (ex: PosProduct), s'il existe.
++     */
++    public function itemFor(object $itemable): ?InventoryItem
++    {
++        return InventoryItem::query()
++            ->where('itemable_type', get_class($itemable))
++            ->where('itemable_id', $itemable->getKey())
++            ->first();
++    }
++
++    /**
++     * Vérifie que le stock est suffisant pour la quantité demandée.
++     * Un item sans fiche de stock (non suivi) est toujours considéré comme suffisant :
++     * on ne bloque la vente que pour les items explicitement suivis en stock.
++     */
++    public function hasSufficientStock(InventoryItem $item, float $quantity): bool
++    {
++        $stock = $item->stock;
++
++        return ! $stock || $stock->hasSufficientQuantity($quantity);
++    }
++
++    /**
++     * Enregistre un mouvement de stock ('in', 'out' ou 'adjustment') et met à jour
++     * la quantité en base de façon atomique (verrou pessimiste pour éviter les
++     * conditions de course entre deux ventes simultanées sur le même item).
++     *
++     * @throws InsufficientStockException si le mouvement est une sortie et que le
++     *         stock déjà suivi est insuffisant.
++     */
++    public function recordMovement(
++        InventoryItem $item,
++        string $type,
++        float $quantity,
++        ?string $referenceType = null,
++        ?string $referenceId = null,
++        ?string $reason = null,
++        ?string $createdBy = null,
++    ): InventoryMovement {
++        return DB::connection('tenant')->transaction(function () use ($item, $type, $quantity, $referenceType, $referenceId, $reason, $createdBy) {
++            $stock = InventoryStock::where('inventory_item_id', $item->id)->lockForUpdate()->first();
++
++            if ($stock) {
++                if ($type === 'out' && ! $stock->hasSufficientQuantity($quantity)) {
++                    throw new InsufficientStockException($item->name, (float) $stock->quantity, $quantity);
++                }
++
++                $stock->quantity = match ($type) {
++                    'in' => (float) $stock->quantity + $quantity,
++                    'out' => (float) $stock->quantity - $quantity,
++                    'adjustment' => $quantity, // l'ajustement fixe la quantité absolue
++                };
++                $stock->save();
++            }
++            // Item non suivi (pas de fiche de stock) : le mouvement est quand même
++            // journalisé pour l'historique, mais aucune quantité n'est décrémentée.
++
++            return InventoryMovement::create([
++                'inventory_item_id' => $item->id,
++                'type' => $type,
++                'quantity' => $quantity,
++                'reference_type' => $referenceType,
++                'reference_id' => $referenceId,
++                'reason' => $reason,
++                'created_by' => $createdBy,
++            ]);
++        });
++    }
++
++    /**
++     * Raccourci pour une vente (sortie de stock).
++     */
++    public function recordSale(
++        InventoryItem $item,
++        float $quantity,
++        ?string $referenceType = null,
++        ?string $referenceId = null,
++        ?string $reason = null,
++        ?string $createdBy = null,
++    ): InventoryMovement {
++        return $this->recordMovement($item, 'out', $quantity, $referenceType, $referenceId, $reason, $createdBy);
++    }
++}
+diff --git a/app/Modules/Messaging/Http/Controllers/ConversationController.php b/app/Modules/Messaging/Http/Controllers/ConversationController.php
+index 1a99791..af84c69 100644
+--- a/app/Modules/Messaging/Http/Controllers/ConversationController.php
++++ b/app/Modules/Messaging/Http/Controllers/ConversationController.php
+@@ -149,12 +149,8 @@ public function addParticipant(string $id, Request $request)
+     /**
+      * Retirer un participant de la conversation.
+      */
+-    public function removeParticipant(string $id, Request $request)
++    public function removeParticipant(string $id, string $userId, Request $request)
+     {
+-        $request->validate([
+-            'user_id' => 'required|exists:users,id',
+-        ]);
+-
+         $conversation = Conversation::findOrFail($id);
+ 
+         // Vérifier que l'utilisateur actuel est admin/owner
+@@ -169,7 +165,7 @@ public function removeParticipant(string $id, Request $request)
+             ], 403);
+         }
+ 
+-        $this->messagingService->removeParticipant($id, $request->user_id);
++        $this->messagingService->removeParticipant($id, $userId);
+ 
+         return response()->json([
+             'message' => 'Participant retiré',
+diff --git a/app/Modules/Messaging/Models/Conversation.php b/app/Modules/Messaging/Models/Conversation.php
+index 39d40a4..e8b751f 100644
+--- a/app/Modules/Messaging/Models/Conversation.php
++++ b/app/Modules/Messaging/Models/Conversation.php
+@@ -101,11 +101,10 @@ public function scopeForUser($query, string $userId)
+      */
+     public function addParticipant(string $userId, string $role = 'member'): ConversationParticipant
+     {
+-        return $this->participants()->create([
+-            'user_id' => $userId,
+-            'role' => $role,
+-            'joined_at' => now(),
+-        ]);
++        return $this->participants()->updateOrCreate(
++            ['user_id' => $userId],
++            ['role' => $role, 'joined_at' => now(), 'left_at' => null]
++        );
+     }
+ 
+     /**
+@@ -113,7 +112,7 @@ public function addParticipant(string $userId, string $role = 'member'): Convers
+      */
+     public function hasParticipant(string $userId): bool
+     {
+-        return $this->participants()->where('user_id', $userId)->exists();
++        return $this->participants()->where('user_id', $userId)->whereNull('left_at')->exists();
+     }
+ 
+     /**
+diff --git a/app/Modules/Messaging/Providers/MessagingServiceProvider.php b/app/Modules/Messaging/Providers/MessagingServiceProvider.php
+index d183829..810b94d 100644
+--- a/app/Modules/Messaging/Providers/MessagingServiceProvider.php
++++ b/app/Modules/Messaging/Providers/MessagingServiceProvider.php
+@@ -16,8 +16,9 @@ public function register(): void
+ 
+     public function boot(): void
+     {
+-        // Charger les migrations du module situées dans le dossier database/migrations du module
+-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
++        // Les migrations du module Messaging vivent dans database/migrations/tenant/
++        // (chargées via le pipeline de migration standard tenant), pas ici :
++        // il n'existe pas de dossier app/Modules/Messaging/database/migrations.
+ 
+         // Charger les routes du module (si tu veux les séparer)
+         // $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
+diff --git a/app/Modules/Messaging/Services/MessagingService.php b/app/Modules/Messaging/Services/MessagingService.php
+index 1727c8f..d048395 100644
+--- a/app/Modules/Messaging/Services/MessagingService.php
++++ b/app/Modules/Messaging/Services/MessagingService.php
+@@ -60,11 +60,11 @@ public function sendMessage(string $conversationId, string $senderId, string $co
+     $conversation = Conversation::findOrFail($conversationId);
+ 
+     if (!$conversation->hasParticipant($senderId)) {
+-        throw new ValidationException('Vous n\'êtes pas participant de cette conversation.');
++        throw new ValidationException('Vous n\'êtes pas participant de cette conversation.', 403);
+     }
+ 
+     if ($conversation->closed_at) {
+-        throw new ValidationException('Cette conversation est fermée.');
++        throw new ValidationException('Cette conversation est fermée.', 422);
+     }
+ 
+     return DB::connection('tenant')->transaction(function () use ($conversation, $senderId, $content) {
+diff --git a/app/Modules/Payment/Routes/PaymentRoutes_api.php b/app/Modules/Payment/Routes/PaymentRoutes_api.php
+deleted file mode 100644
+index 5056c4d..0000000
+--- a/app/Modules/Payment/Routes/PaymentRoutes_api.php
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<?php
+-
+-use App\Modules\Payment\Http\Controllers\PaymentController;
+-use App\Modules\Payment\Http\Controllers\WebhookController;
+-use Illuminate\Support\Facades\Route;
+-use App\Modules\Payment\Http\Controllers\PaymentMethodController;
+-
+-Route::middleware(['identify.tenant', 'auth:sanctum'])->prefix('payment-methods')->group(function () {
+-    Route::get('/', [PaymentMethodController::class, 'index']);
+-    Route::post('/', [PaymentMethodController::class, 'store']);
+-    Route::delete('/{id}', [PaymentMethodController::class, 'destroy']);
+-    Route::post('/{id}/default', [PaymentMethodController::class, 'setDefault']);
+-});
+-
+-Route::middleware(['identify.tenant', 'auth:sanctum'])->prefix('payments')->group(function () {
+-    Route::post('initiate', [PaymentController::class, 'initiate']);
+-    Route::get('transactions', [PaymentController::class, 'index']);
+-    Route::get('transactions/{id}', [PaymentController::class, 'show']);
+-});
+-
+-Route::post('webhook/{provider}/{tenant}', [WebhookController::class, 'handle'])->name('payment.webhook');
+diff --git a/app/Modules/Pos/Http/Controllers/PosOrderController.php b/app/Modules/Pos/Http/Controllers/PosOrderController.php
+index 4c090a8..f3972d8 100644
+--- a/app/Modules/Pos/Http/Controllers/PosOrderController.php
++++ b/app/Modules/Pos/Http/Controllers/PosOrderController.php
+@@ -3,6 +3,7 @@
+ namespace App\Modules\Pos\Http\Controllers;
+ 
+ use App\Http\Controllers\Controller;
++use App\Modules\Inventory\Exceptions\InsufficientStockException;
+ use App\Modules\Pos\Http\Requests\AddPosOrderItemRequest;
+ use App\Modules\Pos\Http\Requests\ClosePosOrderRequest;
+ use App\Modules\Pos\Http\Requests\StorePosOrderRequest;
+@@ -83,7 +84,11 @@ public function markServed(PosOrder $posOrder): JsonResponse
+ 
+     public function close(ClosePosOrderRequest $request, PosOrder $posOrder): JsonResponse
+     {
+-        $order = $this->orders->closeOrder($posOrder, $request->input('payment_method'));
++        try {
++            $order = $this->orders->closeOrder($posOrder, $request->input('payment_method'));
++        } catch (InsufficientStockException $e) {
++            return response()->json(['message' => $e->getMessage()], 422);
++        }
+ 
+         return response()->json(new PosOrderResource($order));
+     }
+diff --git a/app/Modules/Pos/Services/PosOrderService.php b/app/Modules/Pos/Services/PosOrderService.php
+index 34c3f67..83fbfa3 100644
+--- a/app/Modules/Pos/Services/PosOrderService.php
++++ b/app/Modules/Pos/Services/PosOrderService.php
+@@ -5,8 +5,8 @@
+ use App\Modules\Hotel\Models\GuestLedger;
+ use App\Modules\Hotel\Models\Invoice;
+ use App\Modules\Hotel\Models\Reservation;
+-use App\Modules\Inventory\Models\InventoryMovement;
+-use App\Modules\Inventory\Models\InventoryStock;
++use App\Modules\Inventory\Exceptions\InsufficientStockException;
++use App\Modules\Inventory\Services\InventoryService;
+ use App\Modules\Pos\Models\PosOrder;
+ use App\Modules\Pos\Models\PosOrderItem;
+ use App\Modules\Pos\Models\PosProduct;
+@@ -15,6 +15,10 @@
+ 
+ class PosOrderService
+ {
++    public function __construct(protected InventoryService $inventory = new InventoryService())
++    {
++    }
++
+     public function createOrder(array $attributes): PosOrder
+     {
+         return PosOrder::create([
+@@ -72,23 +76,21 @@ public function closeOrder(PosOrder $order, string $paymentMethod, float $taxRat
+             $order->recalculateTotals($taxRate);
+ 
+             // 2. Déduction automatique du stock pour chaque article commandé
++            //    (uniquement pour les produits explicitement suivis en inventaire ;
++            //    lève une InsufficientStockException — qui annule toute la clôture
++            //    via le rollback de transaction — si le stock suivi est insuffisant)
+             foreach ($order->items as $item) {
+-                $stock = InventoryStock::where('pos_product_id', $item->pos_product_id)->first();
+-
+-                if ($stock) {
+-                    // Décrémenter le stock disponible
+-                    $stock->decrement('quantity', $item->quantity);
+-
+-                    // Tracer le mouvement de sortie de stock
+-                    InventoryMovement::create([
+-                        'pos_product_id' => $item->pos_product_id,
+-                        'type' => 'out',
+-                        'quantity' => $item->quantity,
+-                        'reference_type' => 'pos_order',
+-                        'reference_id' => $order->id,
+-                        'reason' => "Vente POS / Commande #{$order->order_number}",
+-                        'created_by' => $order->created_by,
+-                    ]);
++                $inventoryItem = $this->inventory->itemFor($item->product);
++
++                if ($inventoryItem) {
++                    $this->inventory->recordSale(
++                        item: $inventoryItem,
++                        quantity: (float) $item->quantity,
++                        referenceType: 'pos_order',
++                        referenceId: $order->id,
++                        reason: "Vente POS / Commande #{$order->order_number}",
++                        createdBy: $order->created_by,
++                    );
+                 }
+             }
+ 
+diff --git a/app/Providers/TenancyServiceProvider.php b/app/Providers/TenancyServiceProvider.php
+index 148e2c4..0e525ec 100644
+--- a/app/Providers/TenancyServiceProvider.php
++++ b/app/Providers/TenancyServiceProvider.php
+@@ -29,6 +29,7 @@ protected function bootMigrations(): void
+             database_path('migrations/landlord/tenancy'),
+             database_path('migrations/landlord/security'),
+             database_path('migrations/landlord/monitoring'),
++            database_path('migrations/landlord/geography'),
+         ]);
+     }
+ 
+diff --git a/bootstrap/app.php b/bootstrap/app.php
+index 7b2024f..fec5ff9 100644
+--- a/bootstrap/app.php
++++ b/bootstrap/app.php
+@@ -57,7 +57,20 @@
+         |--------------------------------------------------------------------------
+         | Gestion globale des exceptions
+         |--------------------------------------------------------------------------
++        | Reprend la logique de rendu des exceptions métier ERP (ValidationException,
++        | BusinessException, ModuleException, etc.) qui n'était jusqu'ici définie
++        | que dans app/Exceptions/Handler.php — jamais enregistrée nulle part
++        | (Laravel 11+ ignore ce fichier sauf branchement explicite ici).
+         */
++        $exceptions->render(function (\App\Exceptions\ERPException $exception, $request) {
++            if ($request->expectsJson()) {
++                return response()->json([
++                    'success' => false,
++                    'message' => $exception->getMessage(),
++                    'errors' => $exception->context(),
++                ], $exception->getCode());
++            }
++        });
+ 
+     })
+     ->create();
+diff --git a/bootstrap/providers.php b/bootstrap/providers.php
+index 913d0e6..5c14beb 100644
+--- a/bootstrap/providers.php
++++ b/bootstrap/providers.php
+@@ -21,4 +21,5 @@
+     RepositoryServiceProvider::class,
+ 
+     App\Modules\Payment\Providers\PaymentServiceProvider::class,
++    App\Modules\Messaging\Providers\MessagingServiceProvider::class,
+ ];
+diff --git a/database/migrations/tenant/2026_08_14_132532_create_complete_geography_tables.php b/database/migrations/landlord/geography/2026_08_14_132532_create_complete_geography_tables.php
+similarity index 100%
+rename from database/migrations/tenant/2026_08_14_132532_create_complete_geography_tables.php
+rename to database/migrations/landlord/geography/2026_08_14_132532_create_complete_geography_tables.php
+diff --git a/database/migrations/landlord/tenancy/2026_09_04_090000_seed_inventory_module.php b/database/migrations/landlord/tenancy/2026_09_04_090000_seed_inventory_module.php
+new file mode 100644
+index 0000000..22e05aa
+--- /dev/null
++++ b/database/migrations/landlord/tenancy/2026_09_04_090000_seed_inventory_module.php
+@@ -0,0 +1,25 @@
++<?php
++
++use App\Models\Landlord\Module;
++use Illuminate\Database\Migrations\Migration;
++
++return new class extends Migration
++{
++    public function up(): void
++    {
++        Module::firstOrCreate(
++            ['name' => 'inventory'],
++            [
++                'label' => 'Inventaire',
++                'description' => 'Suivi des stocks et mouvements (entrées, sorties, ajustements).',
++                'icon' => 'archive',
++                'is_active' => true,
++            ]
++        );
++    }
++
++    public function down(): void
++    {
++        Module::where('name', 'inventory')->delete();
++    }
++};
+diff --git a/database/migrations/tenant/inventory/2026_08_06_160000_create_inventory_items_table.php b/database/migrations/tenant/inventory/2026_08_06_160000_create_inventory_items_table.php
+new file mode 100644
+index 0000000..e3d973a
+--- /dev/null
++++ b/database/migrations/tenant/inventory/2026_08_06_160000_create_inventory_items_table.php
+@@ -0,0 +1,38 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Database\Schema\Blueprint;
++use Illuminate\Support\Facades\Schema;
++
++return new class extends Migration
++{
++    public function up(): void
++    {
++        if (! Schema::hasTable('inventory_items')) {
++            Schema::create('inventory_items', function (Blueprint $table) {
++                $table->uuid('id')->primary();
++                $table->string('name');
++                $table->string('sku')->nullable()->unique();
++                $table->string('unit')->default('pcs'); // pcs, kg, l, box, ...
++                $table->string('category')->nullable();
++                $table->boolean('is_active')->default(true);
++
++                // Lien polymorphe optionnel vers l'entité "source" du produit
++                // (ex: PosProduct). Nullable : un item peut exister sans être
++                // rattaché à aucun autre module (linge, fournitures, etc.).
++                $table->string('itemable_type')->nullable();
++                $table->uuid('itemable_id')->nullable();
++
++                $table->timestamps();
++                $table->softDeletes();
++
++                $table->index(['itemable_type', 'itemable_id']);
++            });
++        }
++    }
++
++    public function down(): void
++    {
++        Schema::dropIfExists('inventory_items');
++    }
++};
+diff --git a/database/migrations/tenant/inventory/2026_08_06_160138_create_inventory_stocks_table.php b/database/migrations/tenant/inventory/2026_08_06_160138_create_inventory_stocks_table.php
+index ed5f0a6..494b561 100644
+--- a/database/migrations/tenant/inventory/2026_08_06_160138_create_inventory_stocks_table.php
++++ b/database/migrations/tenant/inventory/2026_08_06_160138_create_inventory_stocks_table.php
+@@ -11,15 +11,14 @@ public function up(): void
+         if (! Schema::hasTable('inventory_stocks')) {
+             Schema::create('inventory_stocks', function (Blueprint $table) {
+                 $table->uuid('id')->primary();
+-                $table->uuid('pos_product_id')->index(); // Lié au produit POS
++                $table->uuid('inventory_item_id')->unique(); // 1 fiche de stock par item
+                 $table->decimal('quantity', 12, 2)->default(0); // Quantité actuelle en stock
+                 $table->decimal('alert_threshold', 12, 2)->default(5); // Seuil d'alerte stock bas
+                 $table->timestamps();
+ 
+-                // Clé étrangère vers la table des produits POS
+-                $table->foreign('pos_product_id')
++                $table->foreign('inventory_item_id')
+                     ->references('id')
+-                    ->on('pos_products')
++                    ->on('inventory_items')
+                     ->onDelete('cascade');
+             });
+         }
+diff --git a/database/migrations/tenant/inventory/2026_08_06_163622_create_inventory_movements_table.php b/database/migrations/tenant/inventory/2026_08_06_163622_create_inventory_movements_table.php
+index d540377..57bd322 100644
+--- a/database/migrations/tenant/inventory/2026_08_06_163622_create_inventory_movements_table.php
++++ b/database/migrations/tenant/inventory/2026_08_06_163622_create_inventory_movements_table.php
+@@ -11,7 +11,7 @@ public function up(): void
+         if (! Schema::hasTable('inventory_movements')) {
+             Schema::create('inventory_movements', function (Blueprint $table) {
+                 $table->uuid('id')->primary();
+-                $table->uuid('pos_product_id')->index();
++                $table->uuid('inventory_item_id')->index();
+                 $table->enum('type', ['in', 'out', 'adjustment']); // 'in' = Entrée/Achat, 'out' = Sortie/Vente, 'adjustment' = Correction
+                 $table->decimal('quantity', 12, 2);
+                 $table->string('reference_type')->nullable(); // Ex: 'pos_order'
+@@ -20,10 +20,9 @@ public function up(): void
+                 $table->uuid('created_by')->nullable();       // Utilisateur qui a déclenché le mouvement
+                 $table->timestamps();
+ 
+-                // Clé étrangère vers la table des produits POS
+-                $table->foreign('pos_product_id')
++                $table->foreign('inventory_item_id')
+                     ->references('id')
+-                    ->on('pos_products')
++                    ->on('inventory_items')
+                     ->onDelete('cascade');
+             });
+         }
+diff --git a/database/seeders/GeographyDemoSeeder.php b/database/seeders/GeographyDemoSeeder.php
+index 64da57a..5d1cf30 100644
+--- a/database/seeders/GeographyDemoSeeder.php
++++ b/database/seeders/GeographyDemoSeeder.php
+@@ -9,7 +9,7 @@
+ use App\Models\Landlord\City;
+ use App\Models\Landlord\Neighborhood;
+ use App\Models\Landlord\Street;
+-use App\Models\Landlord\Address;
++use App\Models\Tenant\Address;
+ use Illuminate\Database\Seeder;
+ use Illuminate\Support\Str;
+ 
+diff --git a/routes/tenant.php b/routes/tenant.php
+index dd198fd..f9c6075 100644
+--- a/routes/tenant.php
++++ b/routes/tenant.php
+@@ -19,6 +19,8 @@
+ use App\Modules\Pos\Http\Controllers\PosOrderController;
+ use App\Modules\Pos\Http\Controllers\PosProductController;
+ use App\Modules\Pos\Http\Controllers\PosTableController;
++use App\Modules\Inventory\Http\Controllers\InventoryItemController;
++use App\Modules\Inventory\Http\Controllers\InventoryMovementController;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Route;
+ 
+@@ -126,6 +128,13 @@
+         Route::post('orders/{posOrder}/close', [PosOrderController::class, 'close']);
+     });
+ 
++    // Module Inventaire (Autonome, payant séparément — peut être utilisé par POS mais n'est pas inclus avec lui)
++    Route::middleware(['auth:sanctum', 'module.active:inventory'])->prefix('inventory')->group(function () {
++        Route::apiResource('items', InventoryItemController::class)->except(['create', 'edit']);
++        Route::get('movements', [InventoryMovementController::class, 'index']);
++        Route::post('movements', [InventoryMovementController::class, 'store']);
++    });
++
+     // Module RH
+     Route::middleware(['auth:sanctum', 'module.active:hr'])->prefix('hr')->group(function () {
+         Route::apiResource('employees', EmployeeController::class);
+diff --git a/tests/Feature/Modules/Inventory/InventoryApiTest.php b/tests/Feature/Modules/Inventory/InventoryApiTest.php
+new file mode 100644
+index 0000000..df729d6
+--- /dev/null
++++ b/tests/Feature/Modules/Inventory/InventoryApiTest.php
+@@ -0,0 +1,184 @@
++<?php
++
++namespace Tests\Feature\Modules\Inventory;
++
++use App\Models\User;
++use App\Modules\Inventory\Models\InventoryItem;
++use App\Modules\Pos\Models\PosCategory;
++use App\Modules\Pos\Models\PosProduct;
++use Laravel\Sanctum\Sanctum;
++use Tests\TenantTestCase;
++
++class InventoryApiTest extends TenantTestCase
++{
++    protected static array $modulesToActivate = ['inventory', 'pos'];
++
++    protected User $user;
++
++    protected function setUp(): void
++    {
++        parent::setUp();
++
++        $this->user = User::factory()->create();
++        Sanctum::actingAs($this->user);
++    }
++
++    protected function headers(): self
++    {
++        return $this->withHeader('X-Tenant', $this->tenant->slug);
++    }
++
++    public function test_it_creates_a_standalone_inventory_item_with_initial_stock(): void
++    {
++        $response = $this->headers()->postJson('/api/inventory/items', [
++            'name' => 'Draps de bain',
++            'sku' => 'DRAP-001',
++            'unit' => 'pcs',
++            'category' => 'linge',
++            'initial_quantity' => 30,
++            'alert_threshold' => 10,
++        ]);
++
++        $response->assertCreated()
++            ->assertJsonPath('name', 'Draps de bain')
++            ->assertJsonPath('stock.quantity', 30.0)
++            ->assertJsonPath('stock.alert_threshold', 10.0)
++            ->assertJsonPath('linked_to', null);
++
++        $this->assertDatabaseHas('inventory_items', ['sku' => 'DRAP-001'], 'tenant');
++        $this->assertDatabaseHas('inventory_stocks', ['quantity' => 30], 'tenant');
++    }
++
++    public function test_it_creates_an_inventory_item_linked_to_a_pos_product(): void
++    {
++        $category = PosCategory::create(['name' => 'Boissons']);
++        $product = PosProduct::create([
++            'pos_category_id' => $category->id,
++            'name' => 'Bière 65cl',
++            'sku' => 'BIERE-65',
++            'price' => 2000,
++        ]);
++
++        $response = $this->headers()->postJson('/api/inventory/items', [
++            'name' => 'Bière 65cl',
++            'pos_product_id' => $product->id,
++            'initial_quantity' => 100,
++        ]);
++
++        $response->assertCreated()->assertJsonPath('linked_to', 'PosProduct');
++
++        $this->assertDatabaseHas('inventory_items', [
++            'itemable_type' => PosProduct::class,
++            'itemable_id' => $product->id,
++        ], 'tenant');
++    }
++
++    public function test_it_rejects_a_duplicate_sku(): void
++    {
++        InventoryItem::create(['name' => 'Item A', 'sku' => 'DUP-1']);
++
++        $response = $this->headers()->postJson('/api/inventory/items', [
++            'name' => 'Item B',
++            'sku' => 'DUP-1',
++        ]);
++
++        $response->assertStatus(422)->assertJsonValidationErrors('sku');
++    }
++
++    public function test_it_lists_and_filters_low_stock_items(): void
++    {
++        $low = InventoryItem::create(['name' => 'Savon']);
++        $low->stock()->create(['quantity' => 2, 'alert_threshold' => 10]);
++
++        $ok = InventoryItem::create(['name' => 'Shampoing']);
++        $ok->stock()->create(['quantity' => 50, 'alert_threshold' => 10]);
++
++        $response = $this->headers()->getJson('/api/inventory/items?low_stock=1');
++
++        $response->assertOk()
++            ->assertJsonCount(1, 'data')
++            ->assertJsonPath('data.0.name', 'Savon');
++    }
++
++    public function test_it_updates_the_alert_threshold(): void
++    {
++        $item = InventoryItem::create(['name' => 'Café']);
++        $item->stock()->create(['quantity' => 20, 'alert_threshold' => 5]);
++
++        $response = $this->headers()->putJson("/api/inventory/items/{$item->id}", [
++            'alert_threshold' => 15,
++        ]);
++
++        $response->assertOk()->assertJsonPath('stock.alert_threshold', 15.0);
++    }
++
++    public function test_it_records_a_manual_in_movement_and_increments_stock(): void
++    {
++        $item = InventoryItem::create(['name' => 'Farine']);
++        $item->stock()->create(['quantity' => 10, 'alert_threshold' => 5]);
++
++        $response = $this->headers()->postJson('/api/inventory/movements', [
++            'inventory_item_id' => $item->id,
++            'type' => 'in',
++            'quantity' => 25,
++            'reason' => 'Réception fournisseur',
++        ]);
++
++        $response->assertCreated()->assertJsonPath('type', 'in');
++
++        $this->assertDatabaseHas('inventory_stocks', [
++            'inventory_item_id' => $item->id,
++            'quantity' => 35,
++        ], 'tenant');
++    }
++
++    public function test_it_rejects_a_manual_out_movement_when_stock_is_insufficient(): void
++    {
++        $item = InventoryItem::create(['name' => 'Sucre']);
++        $item->stock()->create(['quantity' => 3, 'alert_threshold' => 5]);
++
++        $response = $this->headers()->postJson('/api/inventory/movements', [
++            'inventory_item_id' => $item->id,
++            'type' => 'out',
++            'quantity' => 10,
++        ]);
++
++        $response->assertStatus(422);
++
++        $this->assertDatabaseHas('inventory_stocks', [
++            'inventory_item_id' => $item->id,
++            'quantity' => 3, // inchangé
++        ], 'tenant');
++
++        $this->assertDatabaseMissing('inventory_movements', [
++            'inventory_item_id' => $item->id,
++        ], 'tenant');
++    }
++
++    public function test_it_lists_movement_history_filtered_by_item(): void
++    {
++        $item = InventoryItem::create(['name' => 'Riz']);
++        $item->stock()->create(['quantity' => 100, 'alert_threshold' => 10]);
++
++        $this->headers()->postJson('/api/inventory/movements', [
++            'inventory_item_id' => $item->id,
++            'type' => 'out',
++            'quantity' => 5,
++        ]);
++
++        $response = $this->headers()->getJson("/api/inventory/movements?inventory_item_id={$item->id}");
++
++        $response->assertOk()->assertJsonCount(1, 'data');
++    }
++
++    public function test_it_soft_deletes_an_item(): void
++    {
++        $item = InventoryItem::create(['name' => 'À supprimer']);
++
++        $response = $this->headers()->deleteJson("/api/inventory/items/{$item->id}");
++
++        $response->assertNoContent();
++
++        $this->assertSoftDeleted('inventory_items', ['id' => $item->id], 'tenant');
++    }
++}
+diff --git a/tests/Feature/Modules/Messaging/MessagingApiTest.php b/tests/Feature/Modules/Messaging/MessagingApiTest.php
+new file mode 100644
+index 0000000..efcb400
+--- /dev/null
++++ b/tests/Feature/Modules/Messaging/MessagingApiTest.php
+@@ -0,0 +1,199 @@
++<?php
++
++namespace Tests\Feature\Modules\Messaging;
++
++use App\Models\User;
++use App\Modules\Messaging\Models\Conversation;
++use Laravel\Sanctum\Sanctum;
++use Tests\TenantTestCase;
++
++class MessagingApiTest extends TenantTestCase
++{
++    // La messagerie est un service transversal, non gated par module.active.
++    protected static array $modulesToActivate = [];
++
++    protected User $userA;
++    protected User $userB;
++    protected User $stranger;
++
++    protected function setUp(): void
++    {
++        parent::setUp();
++
++        $this->userA = User::factory()->create();
++        $this->userB = User::factory()->create();
++        $this->stranger = User::factory()->create();
++    }
++
++    protected function actingAsHeaders(User $user): self
++    {
++        Sanctum::actingAs($user);
++
++        return $this->withHeader('X-Tenant', $this->tenant->slug);
++    }
++
++    public function test_it_creates_a_conversation_with_the_creator_as_owner(): void
++    {
++        $response = $this->actingAsHeaders($this->userA)->postJson('/api/messaging/conversations', [
++            'participants' => [$this->userB->id],
++            'subject' => 'Question réservation',
++        ]);
++
++        $response->assertCreated();
++
++        $conversationId = $response->json('data.id');
++
++        $this->assertDatabaseHas('conversation_participants', [
++            'conversation_id' => $conversationId,
++            'user_id' => $this->userA->id,
++            'role' => 'owner',
++        ], 'tenant');
++
++        $this->assertDatabaseHas('conversation_participants', [
++            'conversation_id' => $conversationId,
++            'user_id' => $this->userB->id,
++            'role' => 'member',
++        ], 'tenant');
++    }
++
++    public function test_a_non_participant_cannot_view_the_conversation(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->stranger)->getJson("/api/messaging/conversations/{$conversation->id}");
++
++        $response->assertStatus(403);
++    }
++
++    public function test_a_participant_can_send_and_read_a_message(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->userA)->postJson(
++            "/api/messaging/conversations/{$conversation->id}/messages",
++            ['content' => 'Bonjour !']
++        );
++
++        $response->assertCreated()->assertJsonPath('data.content', 'Bonjour !');
++
++        $this->assertDatabaseHas('messages', [
++            'conversation_id' => $conversation->id,
++            'sender_id' => $this->userA->id,
++            'content' => 'Bonjour !',
++        ], 'tenant');
++    }
++
++    public function test_a_non_participant_cannot_send_a_message(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->stranger)->postJson(
++            "/api/messaging/conversations/{$conversation->id}/messages",
++            ['content' => 'Je m\'invite']
++        );
++
++        $response->assertStatus(403);
++
++        $this->assertDatabaseMissing('messages', [
++            'conversation_id' => $conversation->id,
++            'content' => 'Je m\'invite',
++        ], 'tenant');
++    }
++
++    public function test_sending_a_message_in_a_closed_conversation_is_rejected(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++        $conversation->close();
++
++        $response = $this->actingAsHeaders($this->userA)->postJson(
++            "/api/messaging/conversations/{$conversation->id}/messages",
++            ['content' => 'Encore là ?']
++        );
++
++        $response->assertStatus(422);
++    }
++
++    public function test_only_owner_or_admin_can_close_the_conversation(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->userB)->postJson("/api/messaging/conversations/{$conversation->id}/close");
++
++        $response->assertStatus(403);
++
++        $this->assertDatabaseHas('conversations', [
++            'id' => $conversation->id,
++            'closed_at' => null,
++        ], 'tenant');
++    }
++
++    public function test_owner_can_remove_a_participant_and_that_participant_loses_access(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->userA)
++            ->deleteJson("/api/messaging/conversations/{$conversation->id}/participants/{$this->userB->id}");
++
++        $response->assertOk();
++
++        $this->assertDatabaseHas('conversation_participants', [
++            'conversation_id' => $conversation->id,
++            'user_id' => $this->userB->id,
++        ], 'tenant');
++
++        // Retiré : ne doit plus pouvoir accéder à la conversation.
++        $access = $this->actingAsHeaders($this->userB)->getJson("/api/messaging/conversations/{$conversation->id}");
++        $access->assertStatus(403);
++    }
++
++    public function test_a_removed_participant_can_be_reinvited_without_error(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $this->actingAsHeaders($this->userA)
++            ->deleteJson("/api/messaging/conversations/{$conversation->id}/participants/{$this->userB->id}");
++
++        $response = $this->actingAsHeaders($this->userA)->postJson(
++            "/api/messaging/conversations/{$conversation->id}/participants",
++            ['user_id' => $this->userB->id]
++        );
++
++        $response->assertCreated();
++
++        $this->assertDatabaseHas('conversation_participants', [
++            'conversation_id' => $conversation->id,
++            'user_id' => $this->userB->id,
++            'left_at' => null,
++        ], 'tenant');
++    }
++
++    public function test_marking_a_conversation_as_read_updates_the_participant(): void
++    {
++        $conversation = $this->createConversation($this->userA, [$this->userB->id]);
++
++        $response = $this->actingAsHeaders($this->userB)->postJson("/api/messaging/conversations/{$conversation->id}/mark-read");
++
++        $response->assertOk();
++
++        $this->assertDatabaseMissing('conversation_participants', [
++            'conversation_id' => $conversation->id,
++            'user_id' => $this->userB->id,
++            'last_read_at' => null,
++        ], 'tenant');
++    }
++
++    protected function createConversation(User $creator, array $participantIds): Conversation
++    {
++        $conversation = Conversation::create([
++            'subject' => 'Conversation test',
++            'created_by' => $creator->id,
++        ]);
++
++        $conversation->addParticipant($creator->id, 'owner');
++        foreach ($participantIds as $id) {
++            $conversation->addParticipant($id, 'member');
++        }
++
++        return $conversation;
++    }
++}
+diff --git a/tests/Feature/Modules/Pos/PosOrderLifecycleApiTest.php b/tests/Feature/Modules/Pos/PosOrderLifecycleApiTest.php
+index 6b8bad4..cddf041 100644
+--- a/tests/Feature/Modules/Pos/PosOrderLifecycleApiTest.php
++++ b/tests/Feature/Modules/Pos/PosOrderLifecycleApiTest.php
+@@ -7,8 +7,8 @@
+ use App\Modules\Hotel\Models\Room;
+ use App\Modules\Hotel\Models\RoomType;
+ use App\Modules\Hotel\Services\ReservationService;
++use App\Modules\Inventory\Models\InventoryItem;
+ use App\Modules\Inventory\Models\InventoryMovement;
+-use App\Modules\Inventory\Models\InventoryStock;
+ use App\Modules\Pos\Models\PosCategory;
+ use App\Modules\Pos\Models\PosOrder;
+ use App\Modules\Pos\Models\PosProduct;
+@@ -151,10 +151,12 @@ public function test_closing_an_order_with_cash_frees_the_table(): void
+ 
+     public function test_closing_an_order_decrements_stock_and_records_a_movement(): void
+     {
+-        $stock = InventoryStock::create([
+-            'pos_product_id' => $this->product->id,
+-            'quantity'       => 50,
++        $item = InventoryItem::create([
++            'name' => $this->product->name,
++            'itemable_type' => PosProduct::class,
++            'itemable_id' => $this->product->id,
+         ]);
++        $stock = $item->stock()->create(['quantity' => 50, 'alert_threshold' => 5]);
+ 
+         $order = PosOrder::create(['order_number' => 'CMD-TEST-6', 'type' => 'dine_in', 'status' => 'served']);
+         $order->items()->create([
+@@ -173,7 +175,7 @@ public function test_closing_an_order_decrements_stock_and_records_a_movement():
+         ], 'tenant');
+ 
+         $this->assertDatabaseHas('inventory_movements', [
+-            'pos_product_id' => $this->product->id,
++            'inventory_item_id' => $item->id,
+             'type'           => 'out',
+             'quantity'       => 4,
+             'reference_type' => 'pos_order',
+@@ -181,6 +183,39 @@ public function test_closing_an_order_decrements_stock_and_records_a_movement():
+         ], 'tenant');
+     }
+ 
++    public function test_closing_an_order_fails_when_stock_is_insufficient(): void
++    {
++        $item = InventoryItem::create([
++            'name' => $this->product->name,
++            'itemable_type' => PosProduct::class,
++            'itemable_id' => $this->product->id,
++        ]);
++        $item->stock()->create(['quantity' => 2, 'alert_threshold' => 5]);
++
++        $order = PosOrder::create(['order_number' => 'CMD-TEST-6B', 'type' => 'dine_in', 'status' => 'served']);
++        $order->items()->create([
++            'pos_product_id' => $this->product->id,
++            'quantity'       => 4,
++            'unit_price'     => 2000,
++        ]);
++
++        $response = $this->headers()->postJson("/api/pos/orders/{$order->id}/close", [
++            'payment_method' => 'cash',
++        ]);
++
++        $response->assertStatus(422);
++
++        $this->assertDatabaseHas('inventory_stocks', [
++            'inventory_item_id' => $item->id,
++            'quantity'          => 2, // inchangé, la clôture a été annulée
++        ], 'tenant');
++
++        $this->assertDatabaseHas('pos_orders', [
++            'id'     => $order->id,
++            'status' => 'served', // pas passée à 'closed'
++        ], 'tenant');
++    }
++
+     public function test_closing_an_order_without_a_stock_row_does_not_fail(): void
+     {
+         // Aucun InventoryStock pour ce produit : la déduction doit être

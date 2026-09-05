@@ -149,12 +149,8 @@ class ConversationController extends Controller
     /**
      * Retirer un participant de la conversation.
      */
-    public function removeParticipant(string $id, Request $request)
+    public function removeParticipant(string $id, string $userId, Request $request)
     {
-        $request->validate([
-            'user_id' => 'required|exists:users,id',
-        ]);
-
         $conversation = Conversation::findOrFail($id);
 
         // Vérifier que l'utilisateur actuel est admin/owner
@@ -169,7 +165,7 @@ class ConversationController extends Controller
             ], 403);
         }
 
-        $this->messagingService->removeParticipant($id, $request->user_id);
+        $this->messagingService->removeParticipant($id, $userId);
 
         return response()->json([
             'message' => 'Participant retiré',

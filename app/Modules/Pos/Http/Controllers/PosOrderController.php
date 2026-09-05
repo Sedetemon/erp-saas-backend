@@ -3,6 +3,7 @@
 namespace App\Modules\Pos\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Inventory\Exceptions\InsufficientStockException;
 use App\Modules\Pos\Http\Requests\AddPosOrderItemRequest;
 use App\Modules\Pos\Http\Requests\ClosePosOrderRequest;
 use App\Modules\Pos\Http\Requests\StorePosOrderRequest;
@@ -83,7 +84,11 @@ class PosOrderController extends Controller
 
     public function close(ClosePosOrderRequest $request, PosOrder $posOrder): JsonResponse
     {
-        $order = $this->orders->closeOrder($posOrder, $request->input('payment_method'));
+        try {
+            $order = $this->orders->closeOrder($posOrder, $request->input('payment_method'));
+        } catch (InsufficientStockException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(new PosOrderResource($order));
     }

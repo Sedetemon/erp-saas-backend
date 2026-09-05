@@ -16,6 +16,7 @@ class Module extends Model
 
     protected $fillable = [
         'name',
+        'slug',  // ⚠️ Doit être présent
         'label',
         'description',
         'icon',

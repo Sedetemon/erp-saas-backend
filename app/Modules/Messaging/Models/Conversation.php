@@ -101,11 +101,10 @@ class Conversation extends Model
      */
     public function addParticipant(string $userId, string $role = 'member'): ConversationParticipant
     {
-        return $this->participants()->create([
-            'user_id' => $userId,
-            'role' => $role,
-            'joined_at' => now(),
-        ]);
+        return $this->participants()->updateOrCreate(
+            ['user_id' => $userId],
+            ['role' => $role, 'joined_at' => now(), 'left_at' => null]
+        );
     }
 
     /**
@@ -113,7 +112,7 @@ class Conversation extends Model
      */
     public function hasParticipant(string $userId): bool
     {
-        return $this->participants()->where('user_id', $userId)->exists();
+        return $this->participants()->where('user_id', $userId)->whereNull('left_at')->exists();
     }
 
     /**

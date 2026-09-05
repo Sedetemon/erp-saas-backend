@@ -13,9 +13,11 @@ return new class extends Migration
     {
         Schema::create('modules', function (Blueprint $table) {
             $table->uuid('id')->primary(); // si vous préférez les UUID
-            $table->string('name')->unique();         // ex: "invoicing"
+            $table->string('name')->unique(); // ex: "invoicing"
             $table->string('label');         // ex: "Facturation"
             $table->text('description')->nullable();
+            $table->string('slug')->nullable()->unique();
+            $table->string('email')->nullable();
             $table->string('icon')->nullable(); // icône pour l'interface
             $table->boolean('is_active')->default(true);
             $table->timestamps();

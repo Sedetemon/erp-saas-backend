@@ -5,86 +5,94 @@ namespace Tests;
 use App\Models\Landlord\Module;
 use App\Models\Landlord\Tenant;
 use App\Support\Enums\TenantStatus;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\DB;  // ⚠️ NOUVELLE LIGNE
 
 abstract class TenantTestCase extends TestCase
 {
-    protected static bool $setupDone = false;
+    use DatabaseTransactions;
 
+    protected static bool $setupDone = false;
     protected Tenant $tenant;
 
-    /**
-     * À surcharger dans chaque TestCase de module.
-     * Ex: protected static array $modulesToActivate = ['hr'];
-     */
-    protected static array $modulesToActivate = ['hotel'];
+    protected static array $modulesToActivate = ['hr'];
 
     protected function setUp(): void
     {
-        parent::setUp();
+        parent::setUp();  // ⚠️ DOIT ÊTRE EN PREMIER !
+DB::connection('landlord')->getSchemaBuilder()->create('activity_log', function ($table) {
+    $table->increments('id');
+    $table->string('log_name')->nullable();
+    $table->text('description')->nullable();
+    $table->nullableMorphs('subject');
+    $table->nullableMorphs('causer');
+    $table->json('properties')->nullable();
+    $table->uuid('batch_uuid')->nullable();
+    $table->timestamps();
+});
 
-        DB::connection('tenant')->disableQueryLog();
+        // Configuration SQLite APRES parent::setUp()
+        config(['activitylog.enabled' => false]);
+        config(['database.default' => 'sqlite']);
+        config(['database.connections.landlord' => [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+        ]]);
+        config(['database.connections.tenant' => [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+        ]]);
 
-        if (! static::$setupDone) {
-            Artisan::call('migrate:fresh', [
-                '--database' => 'landlord',
-                '--force'    => true,
-            ]);
+        // Exécuter les migrations landlord
+        Artisan::call('migrate:fresh', [
+            '--database' => 'landlord',
+            '--force' => true,
+            '--path' => 'database/migrations/landlord/tenancy'
+        ]);
 
-            DB::connection('landlord')->statement(
-                'DROP DATABASE IF EXISTS `erp_tenant_testing`'
-            );
-
-            static::$setupDone = true;
-        }
-
-        $this->tenant = Tenant::on('landlord')->firstOrCreate(
-            ['id' => 'testing'],
+        // Créer un module HR pour les tests
+        $hrModule = Module::on('landlord')->firstOrCreate(
+            ['name' => 'hr'],
             [
-                'name'   => 'Testing Tenant',
-                'slug'   => 'testing-tenant',
-                'email'  => 'tenant-testing@example.com',
+                'slug' => 'hr',
+                'label' => 'Ressources Humaines',
+                'is_active' => true
+            ]
+        );
+
+        // Créer un tenant de test
+        $this->tenant = Tenant::on('landlord')->firstOrCreate(
+            ['slug' => 'test-tenant'],
+            [
+                'name' => 'Test Tenant',
+                'email' => 'test-tenant@example.com',
+                'database' => ':memory:',
                 'status' => TenantStatus::ACTIVE,
             ]
         );
 
-        tenancy()->initialize($this->tenant);
-
-        foreach (static::$modulesToActivate as $moduleName) {
-            $module = Module::on('landlord')->where('name', $moduleName)->firstOrFail();
-
-            $this->tenant->modules()->syncWithoutDetaching([
-                $module->id => [
-                    'is_active'    => true,
-                    'activated_at' => now(),
-                ],
-            ]);
-        }
-
-        Artisan::call('tenants:migrate', [
-            '--tenants' => [$this->tenant->id],
-            '--force'   => true,
+        // Activer le module HR pour ce tenant
+        $this->tenant->modules()->syncWithoutDetaching([
+            $hrModule->id => ['is_active' => true, 'activated_at' => now()]
         ]);
 
-        DB::connection('landlord')->beginTransaction();
-        DB::connection('tenant')->beginTransaction();
+        // Initialiser le tenant
+        tenancy()->initialize($this->tenant);
+
+        // Créer les tables tenant
+        Artisan::call('migrate:fresh', [
+            '--database' => 'tenant',
+            '--force' => true,
+            '--path' => 'database/migrations/tenant/hr'
+        ]);
     }
 
     protected function tearDown(): void
     {
-        if (DB::connection('tenant')->transactionLevel() > 0) {
-            DB::connection('tenant')->rollBack();
-        }
-
-        if (DB::connection('landlord')->transactionLevel() > 0) {
-            DB::connection('landlord')->rollBack();
-        }
-
         if (tenancy()->initialized) {
             tenancy()->end();
         }
-
         parent::tearDown();
     }
 }

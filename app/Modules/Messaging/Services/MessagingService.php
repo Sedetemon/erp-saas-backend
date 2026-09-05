@@ -60,11 +60,11 @@ class MessagingService
     $conversation = Conversation::findOrFail($conversationId);
 
     if (!$conversation->hasParticipant($senderId)) {
-        throw new ValidationException('Vous n\'êtes pas participant de cette conversation.');
+        throw new ValidationException('Vous n\'êtes pas participant de cette conversation.', 403);
     }
 
     if ($conversation->closed_at) {
-        throw new ValidationException('Cette conversation est fermée.');
+        throw new ValidationException('Cette conversation est fermée.', 422);
     }
 
     return DB::connection('tenant')->transaction(function () use ($conversation, $senderId, $content) {

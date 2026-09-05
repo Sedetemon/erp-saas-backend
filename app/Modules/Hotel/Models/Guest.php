@@ -2,8 +2,6 @@
 
 namespace App\Modules\Hotel\Models;
 
-use App\Modules\Geography\Models\City;
-use App\Modules\Geography\Models\Country;
 use App\Support\Traits\HasUuid;
 use Database\Factories\Module\Hotel\GuestFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,14 +21,11 @@ class Guest extends Model
         'last_name',
         'email',
         'phone',
-        'country_id',
-        'city_id',
         'nationality',
         'document_type',
         'document_number',
         'address',
         'notes',
-        'hotel_id',
     ];
 
     protected static function newFactory(): GuestFactory
@@ -40,16 +35,6 @@ class Guest extends Model
 
     // --- RELATIONS ---
 
-    public function country(): BelongsTo
-    {
-        return $this->belongsTo(Country::class, 'country_id');
-    }
-
-    public function city(): BelongsTo
-    {
-        return $this->belongsTo(City::class, 'city_id');
-    }
-
     public function reservations(): HasMany
     {
         return $this->hasMany(Reservation::class);
@@ -58,11 +43,6 @@ class Guest extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
-    }
-
-    public function hotel(): BelongsTo
-    {
-        return $this->belongsTo(Hotel::class);
     }
 
     // --- ACCESSEURS ---

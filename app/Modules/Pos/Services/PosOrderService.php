@@ -5,8 +5,8 @@ namespace App\Modules\Pos\Services;
 use App\Modules\Hotel\Models\GuestLedger;
 use App\Modules\Hotel\Models\Invoice;
 use App\Modules\Hotel\Models\Reservation;
-use App\Modules\Inventory\Models\InventoryMovement;
-use App\Modules\Inventory\Models\InventoryStock;
+use App\Modules\Inventory\Exceptions\InsufficientStockException;
+use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Pos\Models\PosOrder;
 use App\Modules\Pos\Models\PosOrderItem;
 use App\Modules\Pos\Models\PosProduct;
@@ -15,6 +15,10 @@ use Illuminate\Support\Str;
 
 class PosOrderService
 {
+    public function __construct(protected InventoryService $inventory = new InventoryService())
+    {
+    }
+
     public function createOrder(array $attributes): PosOrder
     {
         return PosOrder::create([
@@ -72,23 +76,21 @@ class PosOrderService
             $order->recalculateTotals($taxRate);
 
             // 2. Déduction automatique du stock pour chaque article commandé
+            //    (uniquement pour les produits explicitement suivis en inventaire ;
+            //    lève une InsufficientStockException — qui annule toute la clôture
+            //    via le rollback de transaction — si le stock suivi est insuffisant)
             foreach ($order->items as $item) {
-                $stock = InventoryStock::where('pos_product_id', $item->pos_product_id)->first();
+                $inventoryItem = $this->inventory->itemFor($item->product);
 
-                if ($stock) {
-                    // Décrémenter le stock disponible
-                    $stock->decrement('quantity', $item->quantity);
-
-                    // Tracer le mouvement de sortie de stock
-                    InventoryMovement::create([
-                        'pos_product_id' => $item->pos_product_id,
-                        'type' => 'out',
-                        'quantity' => $item->quantity,
-                        'reference_type' => 'pos_order',
-                        'reference_id' => $order->id,
-                        'reason' => "Vente POS / Commande #{$order->order_number}",
-                        'created_by' => $order->created_by,
-                    ]);
+                if ($inventoryItem) {
+                    $this->inventory->recordSale(
+                        item: $inventoryItem,
+                        quantity: (float) $item->quantity,
+                        referenceType: 'pos_order',
+                        referenceId: $order->id,
+                        reason: "Vente POS / Commande #{$order->order_number}",
+                        createdBy: $order->created_by,
+                    );
                 }
             }
 

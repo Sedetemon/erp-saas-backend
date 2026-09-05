@@ -2,41 +2,39 @@
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
-         colors="true"
->
+         colors="true">
     <testsuites>
-    <testsuite name="Unit">
-        <directory>tests/Unit</directory>
-    </testsuite>
-
-    <testsuite name="Feature">
-        <directory suffix="Test.php">tests/Feature</directory>
-    </testsuite>
-</testsuites>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">app</directory>
+        </include>
+    </source>
     <php>
-    <env name="APP_ENV" value="testing"/>
-    <env name="BCRYPT_ROUNDS" value="4"/>
-    <env name="CACHE_DRIVER" value="array"/>
-    <env name="MAIL_MAILER" value="array"/>
-    <env name="QUEUE_CONNECTION" value="sync"/>
-    <env name="SESSION_DRIVER" value="array"/>
-    <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_DEBUG" value="true"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array"/>
 
-    <!-- Base de données MySQL -->
-    <env name="DB_CONNECTION" value="mysql"/>
-    <env name="DB_HOST" value="127.0.0.1"/>
-    <env name="DB_PORT" value="3306"/>
-    <env name="DB_USERNAME" value="root"/>
-    <env name="DB_PASSWORD" value=""/>
+        <!-- Connexion globale par défaut -->
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
 
-    <!-- Base centrale / Landlord -->
-    <env name="DB_DATABASE" value="erp_landlord_testing"/>
+        <!-- Surcharges spécifiques Landlord et Tenant -->
+        <env name="DB_CONNECTION_LANDLORD" value="sqlite"/>
+        <env name="DB_CONNECTION_TENANT" value="sqlite"/>
 
-    <!-- Base tenant de test -->
-    <env name="DB_TENANT_DATABASE" value="erp_tenant_testing"/>
-    <env name="DB_CONNECTION" value="sqlite"/>
-    <env name="DB_DATABASE" value=":memory:"/>
-
-
+        <env name="LOG_CHANNEL" value="single"/>
+        <env name="LOG_LEVEL" value="debug"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
     </php>
 </phpunit>

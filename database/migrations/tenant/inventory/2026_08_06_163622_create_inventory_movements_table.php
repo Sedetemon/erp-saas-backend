@@ -11,7 +11,7 @@ return new class extends Migration
         if (! Schema::hasTable('inventory_movements')) {
             Schema::create('inventory_movements', function (Blueprint $table) {
                 $table->uuid('id')->primary();
-                $table->uuid('pos_product_id')->index();
+                $table->uuid('inventory_item_id')->index();
                 $table->enum('type', ['in', 'out', 'adjustment']); // 'in' = Entrée/Achat, 'out' = Sortie/Vente, 'adjustment' = Correction
                 $table->decimal('quantity', 12, 2);
                 $table->string('reference_type')->nullable(); // Ex: 'pos_order'
@@ -20,10 +20,9 @@ return new class extends Migration
                 $table->uuid('created_by')->nullable();       // Utilisateur qui a déclenché le mouvement
                 $table->timestamps();
 
-                // Clé étrangère vers la table des produits POS
-                $table->foreign('pos_product_id')
+                $table->foreign('inventory_item_id')
                     ->references('id')
-                    ->on('pos_products')
+                    ->on('inventory_items')
                     ->onDelete('cascade');
             });
         }

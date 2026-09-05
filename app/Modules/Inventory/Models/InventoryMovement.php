@@ -2,7 +2,6 @@
 
 namespace App\Modules\Inventory\Models;
 
-use App\Modules\Pos\Models\PosProduct;
 use App\Support\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +13,7 @@ class InventoryMovement extends Model
     protected $table = 'inventory_movements';
 
     protected $fillable = [
-        'pos_product_id',
+        'inventory_item_id',
         'type',
         'quantity',
         'reference_type',
@@ -27,8 +26,8 @@ class InventoryMovement extends Model
         'quantity' => 'decimal:2',
     ];
 
-    public function product(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(PosProduct::class, 'pos_product_id');
+        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
     }
 }

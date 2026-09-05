@@ -2,7 +2,6 @@
 
 namespace App\Modules\Inventory\Models;
 
-use App\Modules\Pos\Models\PosProduct;
 use App\Support\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +13,7 @@ class InventoryStock extends Model
     protected $table = 'inventory_stocks';
 
     protected $fillable = [
-        'pos_product_id',
+        'inventory_item_id',
         'quantity',
         'alert_threshold',
     ];
@@ -24,8 +23,23 @@ class InventoryStock extends Model
         'alert_threshold' => 'decimal:2',
     ];
 
-    public function product(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(PosProduct::class, 'pos_product_id');
+        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+    }
+
+    public function isLow(): bool
+    {
+        return (float) $this->quantity <= (float) $this->alert_threshold;
+    }
+
+    public function hasSufficientQuantity(float $quantity): bool
+    {
+        return (float) $this->quantity >= $quantity;
+    }
+
+    public function scopeLowStock($query)
+    {
+        return $query->whereColumn('quantity', '<=', 'alert_threshold');
     }
 }

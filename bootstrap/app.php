@@ -57,7 +57,20 @@ return Application::configure(
         |--------------------------------------------------------------------------
         | Gestion globale des exceptions
         |--------------------------------------------------------------------------
+        | Reprend la logique de rendu des exceptions métier ERP (ValidationException,
+        | BusinessException, ModuleException, etc.) qui n'était jusqu'ici définie
+        | que dans app/Exceptions/Handler.php — jamais enregistrée nulle part
+        | (Laravel 11+ ignore ce fichier sauf branchement explicite ici).
         */
+        $exceptions->render(function (\App\Exceptions\ERPException $exception, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $exception->getMessage(),
+                    'errors' => $exception->context(),
+                ], $exception->getCode());
+            }
+        });
 
     })
     ->create();
