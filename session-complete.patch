@@ -1220,6 +1220,56 @@ index 913d0e6..5c14beb 100644
      App\Modules\Payment\Providers\PaymentServiceProvider::class,
 +    App\Modules\Messaging\Providers\MessagingServiceProvider::class,
  ];
+diff --git a/config/database.php b/config/database.php
+index 6374ebb..3e44ae8 100644
+--- a/config/database.php
++++ b/config/database.php
+@@ -115,11 +115,17 @@
+         // ============================================================
+         //   🔐 CONNEXION LANDLORD (base centrale du SaaS)
+         // ============================================================
+-        'landlord' => [
++        // Driver conditionnel : sqlite en test (rapide, aucune dépendance
++        // à un serveur MySQL local), mysql partout ailleurs (dev/prod).
++        'landlord' => env('DB_CONNECTION') === 'sqlite' ? [
++            'driver' => 'sqlite',
++            'database' => ':memory:',
++            'foreign_key_constraints' => true,
++        ] : [
+             'driver' => 'mysql',
+             'host' => env('DB_HOST', '127.0.0.1'),
+             'port' => env('DB_PORT', '3306'),
+-            'database' => env('DB_DATABASE', 'erp_landlord'),
++            'database' => env('DB_LANDLORD_DATABASE', 'erp_landlord'),
+             'username' => env('DB_USERNAME', 'root'),
+             'password' => env('DB_PASSWORD', ''),
+             'unix_socket' => env('DB_SOCKET', ''),
+@@ -139,7 +145,11 @@
+         // database.connections.tenant dynamiquement à chaque bascule de
+         // tenant (DatabaseManager::connectToTenant()). Un gabarit portant
+         // aussi ce nom serait supprimé juste avant d'être relu.
+-        'tenant_template' => [
++        'tenant_template' => env('DB_CONNECTION') === 'sqlite' ? [
++            'driver' => 'sqlite',
++            'database' => null, // Chemin de fichier généré dynamiquement par SQLiteDatabaseManager
++            'foreign_key_constraints' => true,
++        ] : [
+             'driver' => 'mysql',
+             'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
+             'port' => env('TENANT_DB_PORT', env('DB_PORT', '3306')),
+diff --git a/config/tenancy.php b/config/tenancy.php
+index 581fd35..057b995 100644
+--- a/config/tenancy.php
++++ b/config/tenancy.php
+@@ -105,7 +105,7 @@
+         '--path' => [
+             database_path('migrations/tenant'),
+             database_path('migrations/tenant/hotel'),
+-            database_path('migrations/tenant/Inventory'),
++            database_path('migrations/tenant/inventory'),
+             database_path('migrations/tenant/hr'),   // <-- à ajouter
+         ],
+         '--realpath' => true,
 diff --git a/database/migrations/tenant/2026_08_14_132532_create_complete_geography_tables.php b/database/migrations/landlord/geography/2026_08_14_132532_create_complete_geography_tables.php
 similarity index 100%
 rename from database/migrations/tenant/2026_08_14_132532_create_complete_geography_tables.php
@@ -1361,6 +1411,35 @@ index 64da57a..5d1cf30 100644
  use Illuminate\Database\Seeder;
  use Illuminate\Support\Str;
  
+diff --git a/phpunit.xml b/phpunit.xml
+index 6219ec0..5a9e263 100644
+--- a/phpunit.xml
++++ b/phpunit.xml
+@@ -22,21 +22,11 @@
+     <env name="SESSION_DRIVER" value="array"/>
+     <env name="TELESCOPE_ENABLED" value="false"/>
+ 
+-    <!-- Base de données MySQL -->
+-    <env name="DB_CONNECTION" value="mysql"/>
+-    <env name="DB_HOST" value="127.0.0.1"/>
+-    <env name="DB_PORT" value="3306"/>
+-    <env name="DB_USERNAME" value="root"/>
+-    <env name="DB_PASSWORD" value=""/>
+-
+-    <!-- Base centrale / Landlord -->
+-    <env name="DB_DATABASE" value="erp_landlord_testing"/>
+-
+-    <!-- Base tenant de test -->
+-    <env name="DB_TENANT_DATABASE" value="erp_tenant_testing"/>
++    <!-- Base de données de test : SQLite en mémoire (rapide, aucune dépendance
++         à un serveur MySQL local). La production/dev utilise MySQL via .env
++         (voir config/database.php : driver conditionnel sur DB_CONNECTION). -->
+     <env name="DB_CONNECTION" value="sqlite"/>
+     <env name="DB_DATABASE" value=":memory:"/>
+ 
+-
+     </php>
+ </phpunit>
 diff --git a/routes/tenant.php b/routes/tenant.php
 index dd198fd..f9c6075 100644
 --- a/routes/tenant.php
@@ -1862,3 +1941,22 @@ index 6b8bad4..cddf041 100644
      public function test_closing_an_order_without_a_stock_row_does_not_fail(): void
      {
          // Aucun InventoryStock pour ce produit : la déduction doit être
+diff --git a/tests/TenantTestCase.php b/tests/TenantTestCase.php
+index 656ad51..56db8b4 100644
+--- a/tests/TenantTestCase.php
++++ b/tests/TenantTestCase.php
+@@ -32,9 +32,11 @@ protected function setUp(): void
+                 '--force'    => true,
+             ]);
+ 
+-            DB::connection('landlord')->statement(
+-                'DROP DATABASE IF EXISTS `erp_tenant_testing`'
+-            );
++            if (DB::connection('landlord')->getDriverName() === 'mysql') {
++                DB::connection('landlord')->statement(
++                    'DROP DATABASE IF EXISTS `erp_tenant_testing`'
++                );
++            }
+ 
+             static::$setupDone = true;
+         }
